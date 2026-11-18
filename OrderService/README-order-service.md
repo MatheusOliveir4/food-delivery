@@ -32,7 +32,8 @@ docker run -p 8084:8084 \
 | `CATALOG_SERVICE_URL` | `http://localhost:8080` | Endereço do Catalog Service |
 | `RESTAURANT_SERVICE_URL` | `http://localhost:8082` | Endereço do Restaurant Service |
 | `JWT_SECRET` | o mesmo padrão do User Service | Validar o token emitido pelo User Service |
-| `SERVICE_TIMEOUT_MS` | `3000` | Tempo máximo de conexão e de resposta nas chamadas ao Catalog e ao Restaurant |
+| `HTTP_CONNECT_TIMEOUT` | `2s` | Tempo máximo para conectar ao Catalog e ao Restaurant |
+| `HTTP_READ_TIMEOUT` | `5s` | Tempo máximo de espera pela resposta do Catalog e do Restaurant |
 | `PAYMENT_SIMULATOR_ENABLED` | `true` | Liga `/dev/payments/*` enquanto o Payment Service não existe |
 
 ## Endpoints
@@ -74,6 +75,14 @@ Para integrar, crie uma implementação de `PaymentEventPublisher` que publique 
 chame `OrderService.handlePaymentApproved(orderId)` / `handlePaymentRejected(orderId, reason)`
 ao consumir `PaymentApproved` / `PaymentRejected` e desligue o simulador (`PAYMENT_SIMULATOR_ENABLED=false`).
 
+## Correlation ID
+
+Toda requisição recebe um `X-Correlation-ID`. Se o cliente enviar um válido (letras, números, `.`, `_`, `-`, até 100 caracteres), ele é reaproveitado; senão, o Order gera um UUID. O ID:
+
+- volta no cabeçalho da resposta, inclusive em respostas de erro;
+- aparece entre colchetes em cada linha de log da requisição;
+- é repassado no cabeçalho `X-Correlation-ID` das chamadas ao Catalog e ao Restaurant.
+
 ## Tratamento de erros
 
 Toda resposta de erro tem o mesmo formato:
@@ -101,7 +110,7 @@ Erros de validação trazem `errors` com a mensagem de cada campo, no lugar de `
 
 | Situação | Comportamento do Order |
 |---|---|
-| Catalog fora do ar ou lento | Adicionar item e checkout respondem `503` após no máximo `SERVICE_TIMEOUT_MS`. Nada é gravado: o carrinho e os pedidos ficam como estavam. Consultas de carrinho e pedidos continuam funcionando, porque usam só o banco do Order. |
+| Catalog fora do ar ou lento | Adicionar item e checkout respondem `503` após no máximo `HTTP_CONNECT_TIMEOUT` (sem conexão) ou `HTTP_READ_TIMEOUT` (sem resposta). Nada é gravado: o carrinho e os pedidos ficam como estavam. Consultas de carrinho e pedidos continuam funcionando, porque usam só o banco do Order. |
 | Restaurant fora do ar ou lento | Checkout e ações do restaurante (listar, aceitar, rejeitar, preparar) respondem `503`. Nada é alterado. Cliente continua consultando carrinho e pedidos. |
 | Produto removido ou indisponível depois de ir para o carrinho | O checkout revalida tudo no Catalog e responde `422` sem criar o pedido. |
 | Preço alterado no Catalog depois de ir para o carrinho | O checkout usa o preço atual do Catalog. Depois de criado, o pedido guarda cópia de nome e preço e não muda mais. |

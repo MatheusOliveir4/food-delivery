@@ -1,12 +1,10 @@
 package com.food_delivery.orderservice.clients.rest;
 
-import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
@@ -22,16 +20,11 @@ public class RestCatalogClient implements CatalogClient {
     private final RestClient restClient;
 
     public RestCatalogClient(
-        @Value("${app.services.catalog-url}") String baseUrl,
-        @Value("${app.services.timeout-ms}") long timeoutMs
+        RestClient.Builder builder,
+        @Value("${app.services.catalog-url}") String baseUrl
     ) {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(Duration.ofMillis(timeoutMs));
-        factory.setReadTimeout(Duration.ofMillis(timeoutMs));
-
-        this.restClient = RestClient.builder()
+        this.restClient = builder
             .baseUrl(baseUrl)
-            .requestFactory(factory)
             .build();
     }
 

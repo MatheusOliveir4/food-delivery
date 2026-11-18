@@ -22,14 +22,25 @@ import com.food_delivery.orderservice.dtos.response.CartResponse;
 import com.food_delivery.orderservice.security.AuthenticatedUser;
 import com.food_delivery.orderservice.services.CartService;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/cart")
+@Tag(name = "Carrinho", description = "Itens do carrinho do cliente")
 public class CartController {
     @Autowired
     private CartService cartService;
 
+    @Operation(summary = "Adicionar item", description = "Consulta o produto no Catalog Service. O cliente vem do token")
+    @ApiResponse(responseCode = "201", description = "Item adicionado")
+    @ApiResponse(responseCode = "400", description = "Dados inválidos")
+    @ApiResponse(responseCode = "401", description = "Sem token ou token inválido")
+    @ApiResponse(responseCode = "403", description = "Não é CUSTOMER")
+    @ApiResponse(responseCode = "404", description = "Produto não encontrado")
+    @ApiResponse(responseCode = "422", description = "Produto indisponível ou de outro restaurante")
     @PostMapping("/items")
     @PreAuthorize("hasRole('CUSTOMER')")
     public ResponseEntity<CartResponse> addItem(
@@ -41,12 +52,22 @@ public class CartController {
             .body(cartService.addItem(user.getId(), request));
     }
 
+    @Operation(summary = "Buscar carrinho", description = "Só o próprio cliente ou um ADMIN")
+    @ApiResponse(responseCode = "200", description = "Carrinho (vazio se não existir)")
+    @ApiResponse(responseCode = "401", description = "Sem token ou token inválido")
+    @ApiResponse(responseCode = "403", description = "Não é o dono do carrinho nem ADMIN")
     @GetMapping("/{customerId}")
     @PreAuthorize("hasRole('ADMIN') or #customerId == authentication.principal.id")
     public ResponseEntity<CartResponse> findByCustomerId(@PathVariable Long customerId) {
         return ResponseEntity.ok(cartService.findByCustomerId(customerId));
     }
 
+    @Operation(summary = "Alterar quantidade de um item")
+    @ApiResponse(responseCode = "200", description = "Carrinho atualizado")
+    @ApiResponse(responseCode = "400", description = "Dados inválidos")
+    @ApiResponse(responseCode = "401", description = "Sem token ou token inválido")
+    @ApiResponse(responseCode = "403", description = "Não é CUSTOMER")
+    @ApiResponse(responseCode = "404", description = "Item não encontrado no carrinho")
     @PutMapping("/items/{id}")
     @PreAuthorize("hasRole('CUSTOMER')")
     public ResponseEntity<CartResponse> updateItem(
@@ -57,6 +78,11 @@ public class CartController {
         return ResponseEntity.ok(cartService.updateItem(user.getId(), id, request));
     }
 
+    @Operation(summary = "Remover item")
+    @ApiResponse(responseCode = "204", description = "Item removido")
+    @ApiResponse(responseCode = "401", description = "Sem token ou token inválido")
+    @ApiResponse(responseCode = "403", description = "Não é CUSTOMER")
+    @ApiResponse(responseCode = "404", description = "Item não encontrado no carrinho")
     @DeleteMapping("/items/{id}")
     @PreAuthorize("hasRole('CUSTOMER')")
     public ResponseEntity<Void> removeItem(

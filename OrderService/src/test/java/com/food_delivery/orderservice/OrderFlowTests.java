@@ -166,6 +166,28 @@ class OrderFlowTests {
     }
 
     @Test
+    void ownerOfAnotherRestaurantCannotManageOrders() throws Exception {
+        String customer = token(40, "CUSTOMER");
+        String otherOwner = token(77, "RESTAURANT_OWNER");
+        String admin = token(1, "ADMIN");
+
+        addToCart(customer, StubData.BURGER_ID, 1);
+        String orderId = checkout(customer, "PIX");
+        mvc.perform(post("/dev/payments/" + orderId + "/approve").header("Authorization", customer));
+
+        mvc.perform(get("/orders/" + orderId).header("Authorization", otherOwner))
+            .andExpect(status().isForbidden());
+        mvc.perform(get("/orders/restaurant/" + StubData.RESTAURANT_OPEN_ID).header("Authorization", otherOwner))
+            .andExpect(status().isForbidden());
+        mvc.perform(patch("/orders/" + orderId + "/accept").header("Authorization", otherOwner))
+            .andExpect(status().isForbidden());
+
+        mvc.perform(patch("/orders/" + orderId + "/accept").header("Authorization", admin))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("ACCEPTED"));
+    }
+
+    @Test
     void cartItemCanBeUpdatedAndRemoved() throws Exception {
         String customer = token(30, "CUSTOMER");
 

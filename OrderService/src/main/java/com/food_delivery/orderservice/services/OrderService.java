@@ -33,6 +33,7 @@ import com.food_delivery.orderservice.exceptions.ResourceNotFoundException;
 import com.food_delivery.orderservice.mappers.OrderMapper;
 import com.food_delivery.orderservice.repositories.CartRepository;
 import com.food_delivery.orderservice.repositories.OrderRepository;
+import com.food_delivery.orderservice.security.AuthenticatedUser;
 
 @Service
 public class OrderService {
@@ -54,11 +55,18 @@ public class OrderService {
     private PaymentEventPublisher paymentEventPublisher;
 
     @Autowired
+    private RestaurantAccessService restaurantAccessService;
+
+    @Autowired
     private OrderMapper orderMapper;
 
     @Transactional(readOnly = true)
-    public OrderResponse findById(UUID id) {
+    public OrderResponse findById(AuthenticatedUser user, UUID id) {
         Order entity = findEntityById(id);
+
+        if (!entity.getCustomerId().equals(user.getId())) {
+            restaurantAccessService.checkCanManage(user, entity.getRestaurantId());
+        }
 
         return orderMapper.mapToOrderResponse(entity);
     }
@@ -71,7 +79,9 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    public List<OrderResponse> findByRestaurant(UUID restaurantId, OrderStatus status) {
+    public List<OrderResponse> findByRestaurant(AuthenticatedUser user, UUID restaurantId, OrderStatus status) {
+        restaurantAccessService.checkCanManage(user, restaurantId);
+
         List<Order> orders = (status == null)
             ? orderRepository.findByRestaurantIdOrderByCreatedAtDesc(restaurantId)
             : orderRepository.findByRestaurantIdAndStatusOrderByCreatedAtDesc(restaurantId, status);
@@ -183,8 +193,9 @@ public class OrderService {
     }
 
     @Transactional
-    public OrderResponse accept(UUID id) {
+    public OrderResponse accept(AuthenticatedUser user, UUID id) {
         Order order = findEntityById(id);
+        restaurantAccessService.checkCanManage(user, order.getRestaurantId());
 
         changeStatus(order, OrderStatus.ACCEPTED);
 
@@ -192,8 +203,9 @@ public class OrderService {
     }
 
     @Transactional
-    public OrderResponse reject(UUID id, RejectOrderRequest request) {
+    public OrderResponse reject(AuthenticatedUser user, UUID id, RejectOrderRequest request) {
         Order order = findEntityById(id);
+        restaurantAccessService.checkCanManage(user, order.getRestaurantId());
 
         changeStatus(order, OrderStatus.REJECTED);
         order.setRejectionReason(request != null ? request.reason() : null);
@@ -214,8 +226,9 @@ public class OrderService {
     }
 
     @Transactional
-    public OrderResponse updatePreparation(UUID id, UpdatePreparationRequest request) {
+    public OrderResponse updatePreparation(AuthenticatedUser user, UUID id, UpdatePreparationRequest request) {
         Order order = findEntityById(id);
+        restaurantAccessService.checkCanManage(user, order.getRestaurantId());
 
         changeStatus(order, OrderStatus.valueOf(request.status().name()));
 

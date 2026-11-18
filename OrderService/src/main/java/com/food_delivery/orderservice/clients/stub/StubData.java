@@ -9,6 +9,8 @@ import com.food_delivery.orderservice.clients.dto.RestaurantInfo;
 public final class StubData {
     private StubData() {}
 
+    public static final Long OWNER_ID = 99L;
+
     public static final UUID RESTAURANT_OPEN_ID = UUID.fromString("00000000-0000-0000-0000-0000000000a1");
     public static final UUID RESTAURANT_CLOSED_ID = UUID.fromString("00000000-0000-0000-0000-0000000000a2");
 
@@ -18,10 +20,10 @@ public final class StubData {
     public static final UUID OTHER_RESTAURANT_PRODUCT_ID = UUID.fromString("00000000-0000-0000-0000-0000000000b4");
 
     public static final RestaurantInfo RESTAURANT_OPEN =
-        new RestaurantInfo(RESTAURANT_OPEN_ID, "Lanchonete Aberta", true);
+        new RestaurantInfo(RESTAURANT_OPEN_ID, "Lanchonete Aberta", OWNER_ID, true);
 
     public static final RestaurantInfo RESTAURANT_CLOSED =
-        new RestaurantInfo(RESTAURANT_CLOSED_ID, "Lanchonete Fechada", false);
+        new RestaurantInfo(RESTAURANT_CLOSED_ID, "Lanchonete Fechada", OWNER_ID, false);
 
     public static final ProductInfo BURGER =
         new ProductInfo(BURGER_ID, "X-Burger", new BigDecimal("25.90"), true, RESTAURANT_OPEN_ID);

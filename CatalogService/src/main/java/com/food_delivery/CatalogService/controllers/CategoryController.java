@@ -1,11 +1,13 @@
 package com.food_delivery.CatalogService.controllers;
 
+import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
+import jakarta.validation.Valid;
+
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,45 +22,45 @@ import com.food_delivery.CatalogService.dtos.request.UpdateCategoryRequest;
 import com.food_delivery.CatalogService.dtos.response.CategoryResponse;
 import com.food_delivery.CatalogService.services.CategoryService;
 
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
-
-@RestController 
-@RequestMapping ("/categories")
+@RestController
+@RequestMapping("/api/v1/categories")
 public class CategoryController {
 
-    @Autowired 
-    private CategoryService categoryService;
+    private final CategoryService categoryService;
+
+    public CategoryController(CategoryService categoryService) {
+        this.categoryService = categoryService;
+    }
+
+    @PostMapping
+    public ResponseEntity<CategoryResponse> create(
+            @Valid @RequestBody CreateCategoryRequest request) {
+        CategoryResponse response = categoryService.save(request);
+        return ResponseEntity.created(URI.create("/api/v1/categories/" + response.id()))
+            .body(response);
+    }
 
     @GetMapping("/{id}")
     public ResponseEntity<CategoryResponse> findById(@PathVariable UUID id) {
         return ResponseEntity.ok(categoryService.findById(id));
     }
 
-    // @GetMapping("/restaurant/{restaurantId}")
-    // public ResponseEntity<List<CategoryResponse>> findByRestaurant(@PathVariable UUID restaurantId) {
-    //     return ResponseEntity.ok(categoryService.findByRestaurant(restaurantId));
-    // }
-
-    @PostMapping 
-    public ResponseEntity<CategoryResponse> create(@Valid @RequestBody CreateCategoryRequest request) {
-        return ResponseEntity
-            .status(HttpStatus.CREATED)
-            .body(categoryService.save(request));
+    @GetMapping("/restaurant/{restaurantId}")
+    public ResponseEntity<List<CategoryResponse>> findByRestaurant(
+            @PathVariable UUID restaurantId) {
+        return ResponseEntity.ok(categoryService.findByRestaurant(restaurantId));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<CategoryResponse> update(
-        @PathVariable UUID id,
-        @Valid @RequestBody UpdateCategoryRequest request
-    ) {
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateCategoryRequest request) {
         return ResponseEntity.ok(categoryService.update(id, request));
     }
 
-    @PatchMapping("/{id}/delete")
-    public ResponseEntity<Void> delete(@PathVariable UUID id) {
-        categoryService.delete(id);
-
+    @PatchMapping("/{id}/deactivate")
+    public ResponseEntity<Void> deactivate(@PathVariable UUID id) {
+        categoryService.deactivate(id);
         return ResponseEntity.noContent().build();
     }
 }

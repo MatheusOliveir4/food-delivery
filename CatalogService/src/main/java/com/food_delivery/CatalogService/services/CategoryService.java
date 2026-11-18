@@ -1,8 +1,8 @@
 package com.food_delivery.CatalogService.services;
 
+import java.util.List;
 import java.util.UUID;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,79 +10,89 @@ import com.food_delivery.CatalogService.dtos.request.CreateCategoryRequest;
 import com.food_delivery.CatalogService.dtos.request.UpdateCategoryRequest;
 import com.food_delivery.CatalogService.dtos.response.CategoryResponse;
 import com.food_delivery.CatalogService.entities.Category;
-// import com.food_delivery.CatalogService.exceptions.BusinessException;
-// import com.food_delivery.CatalogService.exceptions.ResourceNotFoundException;
+import com.food_delivery.CatalogService.exceptions.BusinessException;
+import com.food_delivery.CatalogService.exceptions.ResourceNotFoundException;
 import com.food_delivery.CatalogService.mappers.CategoryMapper;
 import com.food_delivery.CatalogService.repositories.CategoryRepository;
-// import com.food_delivery.CatalogService.repositories.ProductRepository;
+import com.food_delivery.CatalogService.repositories.ProductRepository;
 
 @Service
 public class CategoryService {
 
-    @Autowired 
-    private CategoryRepository categoryRepository;
-    // @Autowired
-    // private ProductRepository productRepository;
-    @Autowired
-    private CategoryMapper categoryMapper;
-  
+    private final CategoryRepository categoryRepository;
+    private final ProductRepository productRepository;
+    private final CategoryMapper categoryMapper;
+
+    public CategoryService(
+            CategoryRepository categoryRepository,
+            ProductRepository productRepository,
+            CategoryMapper categoryMapper) {
+        this.categoryRepository = categoryRepository;
+        this.productRepository = productRepository;
+        this.categoryMapper = categoryMapper;
+    }
 
     @Transactional(readOnly = true)
     public CategoryResponse findById(UUID id) {
+        return categoryMapper.mapToCategoryResponse(getCategory(id));
+    }
 
-        Category entity = categoryRepository.findById(id)
-            .orElseThrow(() ->
-                new Error(
-                    "Categoria não encontrada: " + id
-                )
-            );
-
-        return categoryMapper.mapToCategoryResponse(entity);
+    @Transactional(readOnly = true)
+    public List<CategoryResponse> findByRestaurant(UUID restaurantId) {
+        return categoryRepository.findByRestaurantIdAndActiveTrueOrderByNameAsc(restaurantId)
+            .stream()
+            .map(categoryMapper::mapToCategoryResponse)
+            .toList();
     }
 
     @Transactional
     public CategoryResponse save(CreateCategoryRequest request) {
+        String normalizedName = request.name().strip();
+        if (categoryRepository.existsByRestaurantIdAndNameIgnoreCase(
+                request.restaurantId(), normalizedName)) {
+            throw new BusinessException("Já existe uma categoria com esse nome para o restaurante.");
+        }
 
-        Category entity = categoryMapper.mapToCategory(request);
-
-        entity = categoryRepository.save(entity);
-
-        return categoryMapper.mapToCategoryResponse(entity);
+        Category category = categoryMapper.mapToCategory(request);
+        category.setName(normalizedName);
+        category.setActive(true);
+        Category saved = categoryRepository.save(category);
+        return categoryMapper.mapToCategoryResponse(saved);
     }
 
     @Transactional
     public CategoryResponse update(UUID id, UpdateCategoryRequest request) {
+        Category category = getCategory(id);
+        if (!category.isActive()) {
+            throw new BusinessException("Não é possível atualizar uma categoria inativa.");
+        }
 
-        Category entity = categoryRepository.findById(id)
-            .orElseThrow(() ->
-                new Error(
-                    "Categoria não encontrada: " + id
-                )
-            );
+        String normalizedName = request.name().strip();
+        if (categoryRepository.existsByRestaurantIdAndNameIgnoreCaseAndIdNot(
+                category.getRestaurantId(), normalizedName, id)) {
+            throw new BusinessException("Já existe uma categoria com esse nome para o restaurante.");
+        }
 
-        categoryMapper.updateCategory(request, entity);
-
-        entity = categoryRepository.save(entity);
-
-        return categoryMapper.mapToCategoryResponse(entity);
+        categoryMapper.updateCategory(request, category);
+        category.setName(normalizedName);
+        return categoryMapper.mapToCategoryResponse(categoryRepository.save(category));
     }
 
     @Transactional
-    public void delete(UUID id) {
-
-        Category entity = categoryRepository.findById(id)
-            .orElseThrow(() ->
-                new Error(
-                    "Categoria não encontrada: " + id
-                )
+    public void deactivate(UUID id) {
+        Category category = getCategory(id);
+        if (productRepository.existsByCategory_Id(id)) {
+            throw new BusinessException(
+                "Não é possível desativar a categoria enquanto houver produtos vinculados a ela. " +
+                "Desative ou mova os produtos primeiro."
             );
+        }
+        category.setActive(false);
+        categoryRepository.save(category);
+    }
 
-        // if (productRepository.existsByCategoryId(id)) {
-        //     throw new BusinessException(
-        //         "Não é possível excluir uma categoria que possui produtos vinculados."
-        //     );
-        // }
-
-        categoryRepository.save(entity);
+    private Category getCategory(UUID id) {
+        return categoryRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Categoria não encontrada: " + id));
     }
 }

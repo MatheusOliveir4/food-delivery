@@ -7,21 +7,15 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import com.food_delivery.CatalogService.entities.Product;
 
-public interface ProductRepository
-        extends JpaRepository<Product, UUID> {
+public interface ProductRepository extends JpaRepository<Product, UUID> {
 
-    List<Product> findByRestaurantId(UUID restaurantId);
+    List<Product> findByRestaurantIdOrderByNameAsc(UUID restaurantId);
 
-    List<Product> findByRestaurantIdAndAvailableTrue(
+    List<Product> findByRestaurantIdAndAvailableTrueOrderByNameAsc(UUID restaurantId);
+
+    List<Product> findByRestaurantIdAndAvailableTrueAndCategory_ActiveTrueOrderByNameAsc(
         UUID restaurantId
     );
 
-    List<Product> findByCategoryId(UUID categoryId);
-
-    List<Product> findByRestaurantIdAndCategoryId(
-        UUID restaurantId,
-        UUID categoryId
-    );
-
-    boolean existsByCategoryId(UUID categoryId);
+    boolean existsByCategory_Id(UUID categoryId);
 }

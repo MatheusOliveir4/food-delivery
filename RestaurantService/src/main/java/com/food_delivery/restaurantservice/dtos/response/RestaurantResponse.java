@@ -7,7 +7,7 @@ public record RestaurantResponse(
     UUID id,
     String name,
     String description,
-    UUID ownerId,
+    Long ownerId,
     Boolean open,
     LocalDateTime createdAt,
     LocalDateTime updatedAt

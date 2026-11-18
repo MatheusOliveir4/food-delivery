@@ -31,7 +31,6 @@ public class RestaurantController {
     @Autowired
     private RestaurantService restaurantService;
 
-    // POST /restaurants
     @PostMapping
     public ResponseEntity<RestaurantResponse> create(@Valid @RequestBody CreateRestaurantRequest request) {
         return ResponseEntity
@@ -39,24 +38,19 @@ public class RestaurantController {
             .body(restaurantService.save(request));
     }
 
-    // GET /restaurants              -> todos
-    // GET /restaurants?open=true    -> só os abertos
-    // GET /restaurants?ownerId=...  -> os de um proprietário
     @GetMapping
     public ResponseEntity<List<RestaurantResponse>> findAll(
         @RequestParam(required = false) Boolean open,
-        @RequestParam(required = false) UUID ownerId
+        @RequestParam(required = false) Long ownerId
     ) {
         return ResponseEntity.ok(restaurantService.findAll(open, ownerId));
     }
 
-    // GET /restaurants/{id}
     @GetMapping("/{id}")
     public ResponseEntity<RestaurantResponse> findById(@PathVariable UUID id) {
         return ResponseEntity.ok(restaurantService.findById(id));
     }
 
-    // PUT /restaurants/{id}
     @PutMapping("/{id}")
     public ResponseEntity<RestaurantResponse> update(
         @PathVariable UUID id,
@@ -65,7 +59,6 @@ public class RestaurantController {
         return ResponseEntity.ok(restaurantService.update(id, request));
     }
 
-    // PATCH /restaurants/{id}/availability
     @PatchMapping("/{id}/availability")
     public ResponseEntity<RestaurantResponse> updateAvailability(
         @PathVariable UUID id,

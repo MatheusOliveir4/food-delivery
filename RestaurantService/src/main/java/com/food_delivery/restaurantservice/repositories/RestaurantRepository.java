@@ -10,9 +10,7 @@ import com.food_delivery.restaurantservice.entities.Restaurant;
 public interface RestaurantRepository
         extends JpaRepository<Restaurant, UUID> {
 
-    // restaurantes de um dono -> WHERE owner_id = ?
-    List<Restaurant> findByOwnerId(UUID ownerId);
+    List<Restaurant> findByOwnerId(Long ownerId);
 
-    // restaurantes abertos -> WHERE open = true
     List<Restaurant> findByOpenTrue();
 }

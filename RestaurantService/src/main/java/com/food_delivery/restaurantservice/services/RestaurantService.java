@@ -26,7 +26,7 @@ public class RestaurantService {
     private RestaurantMapper restaurantMapper;
 
     @Transactional(readOnly = true)
-    public List<RestaurantResponse> findAll(Boolean open, UUID ownerId) {
+    public List<RestaurantResponse> findAll(Boolean open, Long ownerId) {
 
         List<Restaurant> restaurants;
 
@@ -85,7 +85,6 @@ public class RestaurantService {
         return restaurantMapper.mapToRestaurantResponse(entity);
     }
 
-    // Busca a entity ou lança 404 (usado por vários métodos acima)
     private Restaurant findEntityById(UUID id) {
         return restaurantRepository.findById(id)
             .orElseThrow(() ->

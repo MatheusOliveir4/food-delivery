@@ -1,7 +1,5 @@
 package com.food_delivery.restaurantservice.dtos.request;
 
-import java.util.UUID;
-
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -16,6 +14,6 @@ public record CreateRestaurantRequest(
     String description,
 
     @NotNull (message = "O proprietário é obrigatório")
-    UUID ownerId
+    Long ownerId
 
 ) {}

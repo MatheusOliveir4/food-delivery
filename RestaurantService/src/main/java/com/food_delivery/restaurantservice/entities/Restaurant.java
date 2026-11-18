@@ -33,7 +33,7 @@ public class Restaurant {
     private String description;
 
     @Column(name = "owner_id", nullable = false)
-    private UUID ownerId;
+    private Long ownerId;
 
     @Column(nullable = false)
     private boolean open = false;
@@ -44,13 +44,11 @@ public class Restaurant {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    // roda automaticamente ANTES do primeiro INSERT
     @PrePersist
     void onCreate() {
         this.createdAt = LocalDateTime.now();
     }
 
-    // roda automaticamente ANTES de cada UPDATE
     @PreUpdate
     void onUpdate() {
         this.updatedAt = LocalDateTime.now();

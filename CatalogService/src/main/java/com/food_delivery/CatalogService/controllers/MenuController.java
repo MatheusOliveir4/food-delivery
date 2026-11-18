@@ -12,7 +12,7 @@ import com.food_delivery.CatalogService.dtos.response.MenuResponse;
 import com.food_delivery.CatalogService.services.MenuService;
 
 @RestController
-@RequestMapping("/api/v1/restaurants")
+@RequestMapping("/restaurants")
 public class MenuController {
 
     private final MenuService menuService;

@@ -24,7 +24,7 @@ import com.food_delivery.CatalogService.dtos.response.ProductResponse;
 import com.food_delivery.CatalogService.services.ProductService;
 
 @RestController
-@RequestMapping("/api/v1/products")
+@RequestMapping("/products")
 public class ProductController {
 
     private final ProductService productService;

@@ -11,27 +11,39 @@ import java.util.Map;
 import java.util.Set;
 
 import org.slf4j.MDC;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import com.food_delivery.middleware.config.MiddlewareProperties;
 import com.food_delivery.middleware.observability.CorrelationIdFilter;
+
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.propagation.Propagator;
 
 @Component
 public class DownstreamClient {
     private static final Set<String> SKIPPED_HEADERS = Set.of(
         "connection", "content-length", "date", "expect", "from", "host", "upgrade", "via",
         "warning", "keep-alive", "transfer-encoding", "te", "trailer", "proxy-connection",
-        "x-correlation-id"
+        "x-correlation-id",
+        "traceparent", "tracestate", "b3", "x-b3-traceid", "x-b3-spanid", "x-b3-parentspanid", "x-b3-sampled"
     );
 
     private final HttpClient httpClient;
+    private final Tracer tracer;
+    private final Propagator propagator;
 
-    public DownstreamClient(MiddlewareProperties properties) {
+    public DownstreamClient(MiddlewareProperties properties,
+                            ObjectProvider<Tracer> tracer,
+                            ObjectProvider<Propagator> propagator) {
         this.httpClient = HttpClient.newBuilder()
             .connectTimeout(properties.connectTimeout())
             .followRedirects(HttpClient.Redirect.NEVER)
             .version(HttpClient.Version.HTTP_1_1)
             .build();
+        this.tracer = tracer.getIfAvailable(() -> Tracer.NOOP);
+        this.propagator = propagator.getIfAvailable(() -> Propagator.NOOP);
     }
 
     public HttpResponse<byte[]> send(String baseUrl, DownstreamRequest request, Duration readTimeout)
@@ -58,7 +70,25 @@ public class DownstreamClient {
             builder.header(CorrelationIdFilter.HEADER_NAME, correlationId);
         }
 
-        return httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+        URI uri = URI.create(target);
+        Span span = tracer.nextSpan()
+            .name(request.method() + " " + uri.getHost())
+            .remoteServiceName(uri.getHost())
+            .tag("http.method", request.method())
+            .tag("http.path", request.path())
+            .start();
+
+        try (Tracer.SpanInScope scope = tracer.withSpan(span)) {
+            propagator.inject(span.context(), builder, HttpRequest.Builder::header);
+            HttpResponse<byte[]> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+            span.tag("http.status_code", String.valueOf(response.statusCode()));
+            return response;
+        } catch (IOException | InterruptedException | RuntimeException e) {
+            span.error(e);
+            throw e;
+        } finally {
+            span.end();
+        }
     }
 
     public static boolean isForwardableResponseHeader(String name) {

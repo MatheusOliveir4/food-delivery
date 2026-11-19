@@ -189,7 +189,17 @@ Cliente ──► middleware :8080 ──► User | Restaurant | Catalog | Order
 | Comunicação síncrona | Roteamento por tabela de rotas, com os mesmos caminhos de cada serviço |
 | Segurança | Valida o JWT do User Service e o papel exigido por rota (protege também Restaurant e Catalog) |
 | Resiliência | Timeout, retry com backoff exponencial (só `GET`), circuit breaker por serviço e fallback `503` |
-| Observabilidade | Correlation ID, log em JSON, métricas por rota e serviço, estado dos circuitos (`/middleware/health` e painel no Grafana) |
+| Observabilidade | Correlation ID, log em JSON, métricas por rota e serviço, estado dos circuitos (`/middleware/health` e painel no Grafana), tracing distribuído no Zipkin |
+
+### Tracing distribuído
+
+Todos os serviços e o middleware enviam spans para o **Zipkin** (http://localhost:9411), com propagação W3C (`traceparent`). Uma requisição aparece como uma árvore só: middleware → serviço → (Order) middleware → Catalog/Restaurant → RabbitMQ → Payment. Para ver: abra o Zipkin, clique em **Run Query** e escolha um trace.
+
+- Os serviços usam Micrometer Tracing com Brave (Boot 4: `spring-boot-starter-zipkin`; Boot 3: `micrometer-tracing-bridge-brave` + `zipkin-reporter-brave`).
+- O middleware usa o `HttpClient` do Java, que o Spring não instrumenta. Por isso o `DownstreamClient` cria o span e escreve o `traceparent` à mão.
+- No RabbitMQ, `observation-enabled` no template e no listener faz o `traceparent` ir no cabeçalho da mensagem.
+- O Correlation ID continua igual. O tracing acrescenta `traceId`/`spanId` aos logs e mostra o tempo de cada etapa.
+- Se o Zipkin estiver fora do ar, os spans são descartados e os serviços continuam funcionando.
 
 Detalhes, rotas e comportamento em falhas: [`middleware/README-middleware.md`](middleware/README-middleware.md).
 

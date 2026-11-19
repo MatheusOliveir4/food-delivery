@@ -24,6 +24,7 @@ Não usa gateway pronto (Kong, Spring Cloud Gateway etc.) nem biblioteca de resi
    - **circuit breaker** por serviço: abre após 5 falhas seguidas, fica aberto 10 s, depois deixa passar uma chamada de teste (meio-aberto) e fecha se ela der certo;
    - **fallback:** com o circuito aberto, responde `503` na hora, sem chamar o serviço.
 6. **Métricas e log:** cada requisição gera uma linha de log em JSON e entra nas métricas.
+7. **Tracing:** cada chamada a um serviço gera um span filho do span da requisição recebida, e o cabeçalho `traceparent` (W3C) é escrito pelo middleware. O `traceparent` que veio do cliente não é repassado como está, para a árvore no Zipkin ficar cliente → middleware → serviço.
 
 ## Rotas
 
@@ -98,6 +99,8 @@ Erros gerados pelo próprio serviço (400, 404, 409, 422 etc.) são repassados s
 | `MIDDLEWARE_RETRY_MAX_ATTEMPTS` / `MIDDLEWARE_RETRY_INITIAL_BACKOFF` | `3` / `200ms` |
 | `MIDDLEWARE_CB_FAILURE_THRESHOLD` / `MIDDLEWARE_CB_OPEN_DURATION` | `5` / `10s` |
 | `LOG_FORMAT` | `ecs` (log em JSON) |
+| `ZIPKIN_ENDPOINT` | `http://localhost:9411/api/v2/spans` (no compose: `http://zipkin:9411/api/v2/spans`) |
+| `TRACING_SAMPLING_PROBABILITY` | `1.0` (todas as requisições) |
 
 ## Como rodar
 

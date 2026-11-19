@@ -25,6 +25,7 @@ services:
   middleware:
     build: ./middleware
     environment:
+      ZIPKIN_ENDPOINT: ${ZIPKIN_ENDPOINT:-http://zipkin:9411/api/v2/spans}
       USER_SERVICE_URL: http://user-service:8081
       RESTAURANT_SERVICE_URL: http://restaurant-service:8082
       CATALOG_SERVICE_URL: http://catalog-service:8083
@@ -61,6 +62,7 @@ services:
       user-db:
         condition: service_healthy
     environment:
+      ZIPKIN_ENDPOINT: ${ZIPKIN_ENDPOINT:-http://zipkin:9411/api/v2/spans}
       DB_URL: jdbc:postgresql://user-db:5432/user_db
       DB_USER: postgres
       DB_PASSWORD: postgres
@@ -95,6 +97,7 @@ services:
       restaurant-db:
         condition: service_healthy
     environment:
+      ZIPKIN_ENDPOINT: ${ZIPKIN_ENDPOINT:-http://zipkin:9411/api/v2/spans}
       DB_URL: jdbc:postgresql://restaurant-db:5432/restaurant_db
       DB_USERNAME: restaurant
       DB_PASSWORD: restaurant
@@ -129,6 +132,7 @@ services:
       catalog-db:
         condition: service_healthy
     environment:
+      ZIPKIN_ENDPOINT: ${ZIPKIN_ENDPOINT:-http://zipkin:9411/api/v2/spans}
       DB_URL: jdbc:postgresql://catalog-db:5432/catalog_db
       DB_USERNAME: catalog
       DB_PASSWORD: catalog
@@ -166,6 +170,7 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
+      ZIPKIN_ENDPOINT: ${ZIPKIN_ENDPOINT:-http://zipkin:9411/api/v2/spans}
       DB_URL: jdbc:postgresql://order-db:5432/order_db
       DB_USERNAME: order
       DB_PASSWORD: order
@@ -213,6 +218,7 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
+      ZIPKIN_ENDPOINT: ${ZIPKIN_ENDPOINT:-http://zipkin:9411/api/v2/spans}
       DB_URL: jdbc:postgresql://payment-db:5432/payment_db
       DB_USERNAME: payment
       DB_PASSWORD: payment

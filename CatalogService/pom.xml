@@ -69,12 +69,6 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Monitoramento da aplicação -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-
         <!-- Exportação de métricas para Prometheus -->
         <dependency>
             <groupId>io.micrometer</groupId>

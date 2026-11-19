@@ -22,15 +22,19 @@ As tabelas (`carts`, `cart_items`, `orders`, `order_items`) são criadas pelo Fl
 ## Como rodar
 
 ```bash
-# banco + serviço em containers
+# banco + serviço em containers (para subir também RabbitMQ e Payment, use o docker-compose da raiz)
 docker compose up --build
 
 # só o banco em container, serviço pela IDE ou Maven
 docker compose up -d order-db
 mvn spring-boot:run
 
-# sem PostgreSQL e sem Catalog/Restaurant: H2 em memória e dados falsos
+# sem PostgreSQL e sem Catalog/Restaurant: H2 em memória e dados falsos.
+# A mensageria fica desligada no profile stub; use /dev/payments/* para aprovar/recusar.
 mvn spring-boot:run -Dspring-boot.run.profiles=stub
+
+# stub, mas com RabbitMQ (precisa do broker: docker compose up -d rabbitmq na raiz)
+MESSAGING_ENABLED=true mvn spring-boot:run -Dspring-boot.run.profiles=stub
 ```
 
 No `docker compose`, o Order chama Catalog (8083) e Restaurant (8082) rodando na máquina host. Para outro endereço, defina `CATALOG_SERVICE_URL` e `RESTAURANT_SERVICE_URL` antes de subir.
@@ -47,7 +51,13 @@ No `docker compose`, o Order chama Catalog (8083) e Restaurant (8082) rodando na
 | `JWT_SECRET` | o mesmo padrão do User Service | Validar o token emitido pelo User Service |
 | `HTTP_CONNECT_TIMEOUT` | `2s` | Tempo máximo para conectar ao Catalog e ao Restaurant |
 | `HTTP_READ_TIMEOUT` | `5s` | Tempo máximo de espera pela resposta do Catalog e do Restaurant |
-| `PAYMENT_SIMULATOR_ENABLED` | `true` | Liga `/dev/payments/*` enquanto o Payment Service não existe |
+| `RABBITMQ_HOST` / `RABBITMQ_PORT` | `localhost` / `5672` | Broker RabbitMQ (no compose: `rabbitmq`) |
+| `RABBITMQ_USER` / `RABBITMQ_PASSWORD` | `guest` / `guest` | Credenciais do broker |
+| `MESSAGING_ENABLED` | `true` (`false` no profile `stub`) | Publica/consome eventos no RabbitMQ. Com `false`, os eventos só vão para o log |
+| `RABBITMQ_LISTENER_MAX_RETRIES` | `2` | Novas tentativas do listener antes da DLQ (1 + 2 = 3 tentativas) |
+| `RABBITMQ_LISTENER_RETRY_INITIAL` | `2s` | Espera antes da 1ª nova tentativa (dobra a cada tentativa) |
+| `PAYMENT_SIMULATOR_ENABLED` | `false` (`true` no profile `stub`) | Liga `/dev/payments/*` para aprovar/recusar pagamentos à mão |
+| `ORDER_PROFILES` (só no compose) | vazio | `stub` sobe o Order com H2 e Catalog/Restaurant falsos |
 
 ## Endpoints
 
@@ -61,7 +71,7 @@ No `docker compose`, o Order chama Catalog (8083) e Restaurant (8082) rodando na
 | `GET /orders/customer/{customerId}` | o próprio cliente ou `ADMIN` |
 | `GET /orders/restaurant/{restaurantId}[?status=]` | dono do restaurante ou `ADMIN` |
 | `PATCH /orders/{id}/accept`, `/reject`, `/preparation` | dono do restaurante ou `ADMIN` |
-| `POST /dev/payments/{orderId}/approve` e `/reject` | simulação do Payment Service |
+| `POST /dev/payments/{orderId}/approve` e `/reject` | só com `PAYMENT_SIMULATOR_ENABLED=true` (profile `stub`) |
 
 "Dono do restaurante" é conferido no Restaurant Service: o `ownerId` do restaurante precisa ser o id do usuário do token.
 
@@ -81,12 +91,12 @@ Transições fora desse fluxo devolvem `409`.
 |---|---|---|
 | Catalog | REST `GET /products/{id}` | `id`, `name`, `price`, `available`, `restaurantId` |
 | Restaurant | REST `GET /restaurants/{id}` | `id`, `name`, `ownerId`, `open` |
-| Payment | eventos (interface `PaymentEventPublisher`) | `PaymentRequested`, `RefundRequested` |
+| Payment | RabbitMQ (`payment.exchange`) | publica `PaymentRequested`, `RefundRequested`; consome `PaymentApproved`, `PaymentRejected`, `PaymentRefunded` |
 
-Ainda não há broker: `LoggingPaymentEventPublisher` só registra os eventos no log.
-Para integrar, crie uma implementação de `PaymentEventPublisher` que publique no broker escolhido,
-chame `OrderService.handlePaymentApproved(orderId)` / `handlePaymentRejected(orderId, reason)`
-ao consumir `PaymentApproved` / `PaymentRejected` e desligue o simulador (`PAYMENT_SIMULATOR_ENABLED=false`).
+Detalhes (filas, payloads, DLQ, retry) na seção **Mensageria** do [README da raiz](../README.md#mensageria).
+
+- `RabbitPaymentEventPublisher` publica depois do commit do checkout/rejeição. Com `MESSAGING_ENABLED=false`, `LoggingPaymentEventPublisher` só registra os eventos no log.
+- `PaymentResultListener` consome `order.payment-result.queue`: `PaymentApproved` → `PENDING_RESTAURANT`, `PaymentRejected` → `PAYMENT_REJECTED`, `PaymentRefunded` → só log (não existe `REFUNDED` em `OrderStatus`; o pedido continua `REJECTED`).
 
 ## Correlation ID
 
@@ -94,7 +104,8 @@ Toda requisição recebe um `X-Correlation-ID`. Se o cliente enviar um válido (
 
 - volta no cabeçalho da resposta, inclusive em respostas de erro;
 - aparece entre colchetes em cada linha de log da requisição;
-- é repassado no cabeçalho `X-Correlation-ID` das chamadas ao Catalog e ao Restaurant.
+- é repassado no cabeçalho `X-Correlation-ID` das chamadas ao Catalog e ao Restaurant;
+- vai no header `X-Correlation-ID` dos eventos publicados no RabbitMQ, e o listener coloca o valor recebido no log enquanto processa a mensagem.
 
 ## Tratamento de erros
 
@@ -129,10 +140,14 @@ Erros de validação trazem `errors` com a mensagem de cada campo, no lugar de `
 | Preço alterado no Catalog depois de ir para o carrinho | O checkout usa o preço atual do Catalog. Depois de criado, o pedido guarda cópia de nome e preço e não muda mais. |
 | Resultado de pagamento repetido | Ignorado: só é aplicado a pedidos em `PENDING_PAYMENT` (idempotência). |
 | Pagamento nunca responde | O pedido fica em `PENDING_PAYMENT` (ainda não há expiração). |
+| RabbitMQ fora do ar | O serviço sobe e fica tentando reconectar; `/actuator/health` mostra `rabbit: DOWN`. O checkout grava o pedido, mas o `PaymentRequested` se perde (erro no log, ver limitações). |
+| Evento inválido, ou para pedido que não existe | Vai direto para `order.payment-result.queue.dlq`, sem novas tentativas. |
+| Erro temporário ao processar evento (ex.: banco) | 3 tentativas (2s, 4s); depois vai para a DLQ. |
 | Banco do Order fora do ar | O serviço não sobe; se cair com o serviço rodando, as requisições respondem `500` e `/actuator/health` fica `DOWN`. Os outros serviços não são afetados. |
 
 **Consistência:** entre o carrinho/pedido e os outros serviços a consistência é **forte no momento do checkout** (o Order consulta Catalog e Restaurant e só grava se tudo estiver válido). Entre o pedido e o pagamento ela é **eventual**: o pedido nasce em `PENDING_PAYMENT` e só muda quando o resultado do pagamento chega.
 
 ## Limitações conhecidas
 
-- Os eventos são publicados dentro da transação do checkout (sem outbox).
+- Os eventos são publicados **depois** do commit, mas sem Transactional Outbox: se o broker falhar entre o commit e o envio, o evento se perde (fica um `ERROR ... EVENTO PERDIDO` no log e o pedido fica em `PENDING_PAYMENT`).
+- Mensagens na DLQ não são reprocessadas automaticamente (reenvie pelo painel do RabbitMQ).

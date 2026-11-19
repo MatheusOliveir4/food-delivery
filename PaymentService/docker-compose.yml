@@ -1,0 +1,49 @@
+# Pode ser usado sozinho (docker compose up nesta pasta) ou pelo docker-compose.yml da raiz,
+# que também sobe o RabbitMQ. Sozinho, o broker precisa estar acessível em RABBITMQ_HOST;
+# enquanto ele não responde, o Spring AMQP continua tentando reconectar.
+services:
+  payment-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: payment_db
+      POSTGRES_USER: payment
+      POSTGRES_PASSWORD: payment
+    ports:
+      - "5437:5432"
+    volumes:
+      - payment_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payment -d payment_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - food-delivery-net
+
+  payment-service:
+    build: .
+    depends_on:
+      payment-db:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://payment-db:5432/payment_db
+      DB_USERNAME: payment
+      DB_PASSWORD: payment
+      JWT_SECRET: ${JWT_SECRET:-troque-esta-chave-por-uma-bem-grande-e-secreta-123}
+      RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      PAYMENT_APPROVAL_RATE: ${PAYMENT_APPROVAL_RATE:-0.8}
+    ports:
+      - "8085:8085"
+    restart: on-failure
+    networks:
+      - food-delivery-net
+
+volumes:
+  payment_db_data:
+
+networks:
+  food-delivery-net:
+    name: food-delivery-net

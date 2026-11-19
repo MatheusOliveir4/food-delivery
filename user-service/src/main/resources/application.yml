@@ -26,6 +26,10 @@ app:
     password: ${ADMIN_PASSWORD:admin12345}
 
 management:
+  observations:
+    enable:
+      spring:
+        security: false
   tracing:
     sampling:
       probability: ${TRACING_SAMPLING_PROBABILITY:1.0}

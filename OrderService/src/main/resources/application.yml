@@ -43,6 +43,10 @@ server:
   port: ${SERVER_PORT:8084}
 
 management:
+  observations:
+    enable:
+      spring:
+        security: false
   tracing:
     sampling:
       probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
@@ -88,4 +92,4 @@ http:
 
 logging:
   pattern:
-    correlation: "[%X{correlationId:-}] "
+    correlation: "[%X{traceId:-}-%X{spanId:-}] [%X{correlationId:-}] "

@@ -1,18 +1,9 @@
 name: food-delivery
 
-include:
-  - user-service/docker-compose.yml
-  - RestaurantService/docker-compose.yml
-  - CatalogService/docker-compose.yml
-  - OrderService/docker-compose.yml
-  - PaymentService/docker-compose.yml
-  - observability/docker-compose.yml
-
 services:
   rabbitmq:
     image: rabbitmq:3-management
     hostname: rabbitmq
-    
     user: "999:999"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
@@ -31,8 +22,238 @@ services:
     networks:
       - food-delivery-net
 
+  user-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: user_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - user_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d user_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - food-delivery-net
+
+  user-service:
+    build: ./user-service
+    depends_on:
+      user-db:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://user-db:5432/user_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET: ${JWT_SECRET:-troque-esta-chave-por-uma-bem-grande-e-secreta-123}
+    ports:
+      - "8081:8081"
+    restart: on-failure
+    networks:
+      - food-delivery-net
+
+  restaurant-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: restaurant_db
+      POSTGRES_USER: restaurant
+      POSTGRES_PASSWORD: restaurant
+    ports:
+      - "5435:5432"
+    volumes:
+      - restaurant_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U restaurant -d restaurant_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - food-delivery-net
+
+  restaurant-service:
+    build: ./RestaurantService
+    depends_on:
+      restaurant-db:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://restaurant-db:5432/restaurant_db
+      DB_USERNAME: restaurant
+      DB_PASSWORD: restaurant
+    ports:
+      - "8082:8082"
+    restart: on-failure
+    networks:
+      - food-delivery-net
+
+  catalog-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: catalog_db
+      POSTGRES_USER: catalog
+      POSTGRES_PASSWORD: catalog
+    ports:
+      - "5434:5432"
+    volumes:
+      - catalog_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U catalog -d catalog_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - food-delivery-net
+
+  catalog-service:
+    build: ./CatalogService
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://catalog-db:5432/catalog_db
+      DB_USERNAME: catalog
+      DB_PASSWORD: catalog
+    ports:
+      - "8083:8083"
+    restart: on-failure
+    networks:
+      - food-delivery-net
+
+  order-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: order_db
+      POSTGRES_USER: order
+      POSTGRES_PASSWORD: order
+    ports:
+      - "5436:5432"
+    volumes:
+      - order_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U order -d order_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - food-delivery-net
+
+  order-service:
+    build: ./OrderService
+    depends_on:
+      order-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://order-db:5432/order_db
+      DB_USERNAME: order
+      DB_PASSWORD: order
+      CATALOG_SERVICE_URL: ${CATALOG_SERVICE_URL:-http://catalog-service:8083}
+      RESTAURANT_SERVICE_URL: ${RESTAURANT_SERVICE_URL:-http://restaurant-service:8082}
+      JWT_SECRET: ${JWT_SECRET:-troque-esta-chave-por-uma-bem-grande-e-secreta-123}
+      RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      PAYMENT_SIMULATOR_ENABLED: ${PAYMENT_SIMULATOR_ENABLED:-false}
+      MESSAGING_ENABLED: ${MESSAGING_ENABLED:-true}
+      SPRING_PROFILES_ACTIVE: ${ORDER_PROFILES:-}
+    ports:
+      - "8084:8084"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: on-failure
+    networks:
+      - food-delivery-net
+
+  payment-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: payment_db
+      POSTGRES_USER: payment
+      POSTGRES_PASSWORD: payment
+    ports:
+      - "5437:5432"
+    volumes:
+      - payment_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payment -d payment_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - food-delivery-net
+
+  payment-service:
+    build: ./PaymentService
+    depends_on:
+      payment-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://payment-db:5432/payment_db
+      DB_USERNAME: payment
+      DB_PASSWORD: payment
+      JWT_SECRET: ${JWT_SECRET:-troque-esta-chave-por-uma-bem-grande-e-secreta-123}
+      RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      PAYMENT_APPROVAL_RATE: ${PAYMENT_APPROVAL_RATE:-0.8}
+    ports:
+      - "8085:8085"
+    restart: on-failure
+    networks:
+      - food-delivery-net
+
+  prometheus:
+    image: prom/prometheus:v3.16.0
+    container_name: food-delivery-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - food-delivery-net
+
+  grafana:
+    image: grafana/grafana:13.3.1
+    container_name: food-delivery-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - food-delivery-net
+
+  zipkin:
+    image: openzipkin/zipkin:3.6.1
+    container_name: food-delivery-zipkin
+    restart: unless-stopped
+    ports:
+      - "9411:9411"
+    networks:
+      - food-delivery-net
+
 volumes:
   rabbitmq_data:
+  user_db_data:
+  restaurant_db_data:
+  catalog_db_data:
+  order_db_data:
+  payment_db_data:
 
 networks:
   food-delivery-net:

@@ -4,8 +4,14 @@ Microsserviço de usuários do projeto Food Delivery (Java 17 + Spring Boot 3 + 
 
 ## Como rodar
 
+O `docker-compose.yml` fica só na raiz do repositório.
+
 ```bash
-docker compose up -d      # sobe o PostgreSQL
+# na raiz: só o User e o banco dele
+docker compose up --build user-service
+
+# ou só o banco em container e o serviço pela IDE ou Maven (dentro de user-service/)
+docker compose up -d user-db
 mvn spring-boot:run
 ```
 

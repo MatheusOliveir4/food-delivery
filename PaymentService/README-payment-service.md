@@ -30,13 +30,17 @@ Banco próprio `payment_db` (porta 5437 no host), criado pelo Flyway (`src/main/
 
 ## Como rodar
 
+O `docker-compose.yml` fica só na raiz do repositório. Rode os comandos `docker compose` de lá.
+
 ```bash
-# na raiz do repositório: RabbitMQ + Order + Payment
+# projeto inteiro
 docker compose up --build
 
-# só o banco e o broker em container, serviço pela IDE ou Maven
-docker compose up -d payment-db          # nesta pasta
-docker compose up -d rabbitmq            # na raiz
+# só o Payment e o que ele usa diretamente
+docker compose up --build payment-service
+
+# só o banco e o broker em container, serviço pela IDE ou Maven (dentro de PaymentService/)
+docker compose up -d payment-db rabbitmq
 ./mvnw spring-boot:run
 ```
 

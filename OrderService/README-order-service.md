@@ -12,7 +12,7 @@ O Order tem o **próprio** PostgreSQL (`order_db`, porta 5436 no host). Nenhum o
 
 | Serviço | Banco | Porta no host |
 |---|---|---|
-| User | `user_db` | 5432 |
+| User | `user_db` | 5433 |
 | Catalog | `catalog_db` | 5434 |
 | Restaurant | `restaurant_db` | 5435 |
 | **Order** | **`order_db`** | **5436** |
@@ -21,23 +21,28 @@ As tabelas (`carts`, `cart_items`, `orders`, `order_items`) são criadas pelo Fl
 
 ## Como rodar
 
+O `docker-compose.yml` fica só na raiz do repositório. Rode os comandos `docker compose` de lá.
+
 ```bash
-# banco + serviço em containers (para subir também RabbitMQ e Payment, use o docker-compose da raiz)
+# projeto inteiro (todos os serviços, bancos, RabbitMQ e observabilidade)
 docker compose up --build
 
-# só o banco em container, serviço pela IDE ou Maven
-docker compose up -d order-db
+# só o Order e o que ele usa diretamente
+docker compose up --build order-service catalog-service restaurant-service
+
+# só o banco e o broker em container, Order pela IDE ou Maven (dentro de OrderService/)
+docker compose up -d order-db rabbitmq
 mvn spring-boot:run
 
 # sem PostgreSQL e sem Catalog/Restaurant: H2 em memória e dados falsos.
 # A mensageria fica desligada no profile stub; use /dev/payments/* para aprovar/recusar.
 mvn spring-boot:run -Dspring-boot.run.profiles=stub
 
-# stub, mas com RabbitMQ (precisa do broker: docker compose up -d rabbitmq na raiz)
+# stub, mas com RabbitMQ (precisa do broker: docker compose up -d rabbitmq)
 MESSAGING_ENABLED=true mvn spring-boot:run -Dspring-boot.run.profiles=stub
 ```
 
-No `docker compose`, o Order chama Catalog (8083) e Restaurant (8082) rodando na máquina host. Para outro endereço, defina `CATALOG_SERVICE_URL` e `RESTAURANT_SERVICE_URL` antes de subir.
+No `docker compose`, o Order chama `catalog-service:8083` e `restaurant-service:8082` pela rede interna `food-delivery-net`. Para outro endereço, defina `CATALOG_SERVICE_URL` e `RESTAURANT_SERVICE_URL` antes de subir.
 
 ## Configuração (variáveis de ambiente)
 

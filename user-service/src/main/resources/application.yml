@@ -1,6 +1,8 @@
 server:
   port: 8081
-
+logging:
+  pattern:
+    level: "%5p [%X{correlationId:-}]"
 spring:
   application:
     name: user-service

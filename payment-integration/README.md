@@ -1,3 +1,5 @@
+> **⚠️ OBSOLETO.** Este protótipo foi substituído pelo [`PaymentService/`](../PaymentService/README-payment-service.md), que tem banco próprio, cobrança e estorno, idempotência, DLQ e a topologia `payment.exchange` descrita na seção **Mensageria** do [README da raiz](../README.md#mensageria). A fila `payment.requested` usada aqui não existe mais, e a porta 8083 conflita com o Catalog Service. Mantido só como referência; não use.
+
 # Módulo de Payment para Food Delivery
 
 Este pacote contém somente o consumidor de pagamentos (`payment-worker`) e os dois arquivos mínimos que precisam ser adicionados ao Middleware para publicar solicitações na fila RabbitMQ.

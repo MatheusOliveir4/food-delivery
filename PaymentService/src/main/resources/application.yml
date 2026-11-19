@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: payment-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5437/payment_db}
+    username: ${DB_USERNAME:payment}
+    password: ${DB_PASSWORD:payment}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    # Confirmação do broker (ack/nack) e devolução de mensagens sem rota.
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+    listener:
+      simple:
+        # Depois das tentativas, a mensagem é rejeitada sem requeue e vai para a DLQ.
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          # 1 entrega + 2 novas tentativas = 3 tentativas (2s, depois 4s).
+          max-retries: ${RABBITMQ_LISTENER_MAX_RETRIES:2}
+          initial-interval: ${RABBITMQ_LISTENER_RETRY_INITIAL:2s}
+          multiplier: 2
+          max-interval: 10s
+
+server:
+  port: ${SERVER_PORT:8085}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    rabbit:
+      enabled: ${app.messaging.enabled}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:troque-esta-chave-por-uma-bem-grande-e-secreta-123}
+  messaging:
+    # true: consome/publica eventos no RabbitMQ. false: só a API REST (eventos vão para o log).
+    enabled: ${MESSAGING_ENABLED:true}
+  payments:
+    # Probabilidade de aprovar um pagamento simulado (0.0 = recusa tudo, 1.0 = aprova tudo).
+    approval-rate: ${PAYMENT_APPROVAL_RATE:0.8}
+
+logging:
+  pattern:
+    correlation: "[%X{correlationId:-}] "

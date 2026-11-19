@@ -6,3 +6,9 @@ spring:
   h2:
     console:
       enabled: true
+
+app:
+  messaging:
+    enabled: ${MESSAGING_ENABLED:false}
+  payments:
+    simulator-enabled: ${PAYMENT_SIMULATOR_ENABLED:true}

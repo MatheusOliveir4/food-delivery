@@ -1,3 +1,6 @@
+# Pode ser usado sozinho (docker compose up nesta pasta) ou pelo docker-compose.yml da raiz,
+# que também sobe o RabbitMQ. Sozinho, o broker precisa estar acessível em RABBITMQ_HOST;
+# enquanto ele não responde, o Spring AMQP continua tentando reconectar.
 services:
   order-db:
     image: postgres:16
@@ -14,6 +17,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks:
+      - food-delivery-net
 
   order-service:
     build: .
@@ -27,10 +32,25 @@ services:
       CATALOG_SERVICE_URL: ${CATALOG_SERVICE_URL:-http://host.docker.internal:8083}
       RESTAURANT_SERVICE_URL: ${RESTAURANT_SERVICE_URL:-http://host.docker.internal:8082}
       JWT_SECRET: ${JWT_SECRET:-troque-esta-chave-por-uma-bem-grande-e-secreta-123}
+      RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      PAYMENT_SIMULATOR_ENABLED: ${PAYMENT_SIMULATOR_ENABLED:-false}
+      MESSAGING_ENABLED: ${MESSAGING_ENABLED:-true}
+      # ORDER_PROFILES=stub usa H2 e Catalog/Restaurant falsos (útil para testar a mensageria sozinha).
+      SPRING_PROFILES_ACTIVE: ${ORDER_PROFILES:-}
     ports:
       - "8084:8084"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    restart: on-failure
+    networks:
+      - food-delivery-net
 
 volumes:
   order_db_data:
+
+networks:
+  food-delivery-net:
+    name: food-delivery-net

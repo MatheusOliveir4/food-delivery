@@ -1,0 +1,40 @@
+# Sobe o broker RabbitMQ e, via `include`, o Order Service e o Payment Service
+# (cada um com o seu próprio PostgreSQL). Todos ficam na rede `food-delivery-net`.
+#
+#   docker compose up --build            # tudo
+#   docker compose up -d rabbitmq        # só o broker (serviços pela IDE/Maven)
+#
+# Painel do RabbitMQ: http://localhost:15672 (guest/guest por padrão)
+name: food-delivery
+
+include:
+  - OrderService/docker-compose.yml
+  - PaymentService/docker-compose.yml
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - food-delivery-net
+
+volumes:
+  rabbitmq_data:
+
+networks:
+  food-delivery-net:
+    name: food-delivery-net

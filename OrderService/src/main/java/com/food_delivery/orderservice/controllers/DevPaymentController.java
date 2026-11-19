@@ -18,7 +18,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RestController
 @ConditionalOnProperty(name = "app.payments.simulator-enabled", havingValue = "true")
 @RequestMapping("/dev/payments")
-@Tag(name = "Pagamento simulado", description = "Substitui o Payment Service enquanto ele não existe")
+@Tag(name = "Pagamento simulado", description = "Aprova ou recusa pagamentos à mão (profile stub, sem RabbitMQ)")
 public class DevPaymentController {
     @Autowired
     private OrderService orderService;

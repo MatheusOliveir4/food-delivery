@@ -152,13 +152,13 @@ public class OrderService {
         cart.setUpdatedAt(LocalDateTime.now());
         cartRepository.save(cart);
 
+        // O publisher só envia depois do commit desta transação.
         paymentEventPublisher.publishPaymentRequested(
-            new PaymentRequestedEvent(
+            PaymentRequestedEvent.of(
                 order.getId(),
                 order.getCustomerId(),
                 order.getTotal(),
-                order.getPaymentMethod(),
-                LocalDateTime.now()
+                order.getPaymentMethod()
             )
         );
 
@@ -212,13 +212,13 @@ public class OrderService {
 
         OrderResponse response = save(order);
 
+        // O publisher só envia depois do commit desta transação.
         paymentEventPublisher.publishRefundRequested(
-            new RefundRequestedEvent(
+            RefundRequestedEvent.of(
                 order.getId(),
                 order.getCustomerId(),
                 order.getTotal(),
-                order.getRejectionReason(),
-                LocalDateTime.now()
+                order.getRejectionReason()
             )
         );
 

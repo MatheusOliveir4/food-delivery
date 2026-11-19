@@ -15,6 +15,27 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    # Confirmação do broker (ack/nack) e devolução de mensagens sem rota.
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+    listener:
+      simple:
+        # Depois das tentativas, a mensagem é rejeitada sem requeue e vai para a DLQ.
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          # 1 entrega + 2 novas tentativas = 3 tentativas (2s, depois 4s).
+          max-retries: ${RABBITMQ_LISTENER_MAX_RETRIES:2}
+          initial-interval: ${RABBITMQ_LISTENER_RETRY_INITIAL:2s}
+          multiplier: 2
+          max-interval: 10s
 
 server:
   port: ${SERVER_PORT:8084}
@@ -23,11 +44,14 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       probes:
         enabled: true
+  health:
+    rabbit:
+      enabled: ${app.messaging.enabled}
 
 app:
   jwt:
@@ -35,8 +59,12 @@ app:
   services:
     catalog-url: ${CATALOG_SERVICE_URL:http://localhost:8083}
     restaurant-url: ${RESTAURANT_SERVICE_URL:http://localhost:8082}
+  messaging:
+    # true: publica/consome eventos no RabbitMQ. false: só escreve os eventos no log.
+    enabled: ${MESSAGING_ENABLED:true}
   payments:
-    simulator-enabled: ${PAYMENT_SIMULATOR_ENABLED:true}
+    # Liga /dev/payments/* (aprovar/recusar pagamento à mão). Desligado fora do profile stub.
+    simulator-enabled: ${PAYMENT_SIMULATOR_ENABLED:false}
 
 http:
   client:

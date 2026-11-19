@@ -1,31 +1,91 @@
 # Food Delivery
 
-## Arquitetura proposta
+Plataforma de delivery de comida construída como **middleware distribuído** para a disciplina de Sistemas Distribuídos (UNICAP, 2º GQ). Clientes criam conta, consultam restaurantes e cardápios, montam o carrinho e fazem pedidos; o pagamento é processado de forma assíncrona e o restaurante aceita e prepara o pedido.
 
-<img width="767" height="598" alt="image" src="https://github.com/user-attachments/assets/17c68fcb-ce3c-4c03-bfb2-c12198ff523d" />
+**Stack:** Java 21 (User Service em Java 17) · Spring Boot · PostgreSQL 16 (um banco por serviço) · RabbitMQ · Docker Compose · Prometheus · Grafana · Zipkin
 
+| | |
+|---|---|
+| Relatório técnico | [`docs/relatorio-tecnico.pdf`](docs/relatorio-tecnico.pdf) |
+| Diagrama de arquitetura | [`docs/arquitetura.png`](docs/arquitetura.png) |
+| Middleware (rotas, resiliência, falhas) | [`middleware/README-middleware.md`](middleware/README-middleware.md) |
+| User · Order · Payment | [`user-service/Readme-user-service.md`](user-service/Readme-user-service.md) · [`OrderService/README-order-service.md`](OrderService/README-order-service.md) · [`PaymentService/README-payment-service.md`](PaymentService/README-payment-service.md) |
 
-## Responsabilidades de cada microsserviço
+**Sumário:** [Arquitetura](#arquitetura) · [Como executar](#como-executar) · [Requisitos atendidos](#requisitos-atendidos) · [Microsserviços](#microsserviços) · [Fluxo completo](#fluxo-completo-do-sistema) · [Middleware](#middleware) · [Mensageria](#mensageria) · [Consistência e falhas](#estratégia-de-consistência)
 
-## 1. User Service
+## Arquitetura
 
-Funcionalidades:
-- Cadastro de usuários.
-- Login e autenticação JWT.
-- Controle de permissões por perfil.
-- Gerenciamento de dados pessoais.
-- Cadastro e gerenciamento de endereços.
+![Arquitetura do Food Delivery](docs/arquitetura.png)
 
-Entidades:
-- `User`
-- `Address`
+- **Cliente → Middleware (:8080):** toda comunicação síncrona entra pelo middleware, escrito do zero pelo grupo. Ele aplica JWT e papéis, timeout, retry, circuit breaker, fallback e correlation ID, e encaminha para o serviço certo.
+- **5 microsserviços independentes**, cada um no seu container e com o seu banco PostgreSQL.
+- **Order → Middleware → Catalog / Restaurant:** no checkout, o Order valida produtos, preços e restaurante via REST, também passando pelo middleware.
+- **Order ⇄ RabbitMQ ⇄ Payment:** o pagamento é assíncrono, com DLQ, retry e idempotência.
+- **Observabilidade:** Prometheus coleta as métricas de todas as aplicações, Grafana mostra os dashboards e Zipkin recebe os traces.
 
-Perfis:
-- `CUSTOMER`
-- `RESTAURANT_OWNER`
-- `ADMIN`
+## Como executar
 
-Endpoints:
+Pré-requisito: Docker Desktop (com Docker Compose).
+
+```bash
+docker compose up -d --build     # sobe tudo: middleware, 5 serviços, 5 bancos, RabbitMQ e observabilidade
+docker compose ps                # aguarde todos ficarem Up / healthy
+curl http://localhost:8080/middleware/health
+```
+
+Para a demonstração, todo pagamento pode ser aprovado com `PAYMENT_APPROVAL_RATE=1.0` (o padrão é 0.8, ou seja, 20% de recusas simuladas):
+
+```bash
+PAYMENT_APPROVAL_RATE=1.0 docker compose up -d --build          # Bash
+```
+```powershell
+$env:PAYMENT_APPROVAL_RATE = "1.0"; docker compose up -d --build  # PowerShell
+```
+
+| Componente | Endereço | Banco (porta no host) |
+|---|---|---|
+| **Middleware** (entrada única) | **http://localhost:8080** | – |
+| User Service | 8081 | `user_db` (5433) |
+| Restaurant Service | 8082 | `restaurant_db` (5435) |
+| Catalog Service | 8083 | `catalog_db` (5434) |
+| Order Service | 8084 | `order_db` (5436) |
+| Payment Service | 8085 | `payment_db` (5437) |
+| RabbitMQ | 5672 (AMQP) · http://localhost:15672 (guest/guest) | – |
+| Prometheus | http://localhost:9090 | – |
+| Grafana | http://localhost:3000 (admin/admin) · Dashboards → Food Delivery | – |
+| Zipkin | http://localhost:9411 | – |
+
+Contratos das APIs (Swagger) em cada serviço: `http://localhost:808X/swagger-ui.html`. As configurações (URLs, credenciais, timeouts, `JWT_SECRET`) são externalizadas por variáveis de ambiente no `docker-compose.yml`.
+
+Testes automatizados:
+
+```bash
+cd middleware && mvn test            # roteamento, 401/403, retry, timeout, circuit breaker
+cd OrderService && sh mvnw test      # mensageria com Testcontainers (pulados sem Docker)
+cd PaymentService && sh mvnw test
+```
+
+## Requisitos atendidos
+
+| Requisito | Como foi atendido |
+|---|---|
+| ≥ 2 serviços independentes, cada um em seu container | 5 serviços + middleware, cada um com Dockerfile; tudo sobe com `docker compose up` |
+| Comunicação síncrona | REST pelo middleware (cliente → serviços; Order → Catalog/Restaurant) |
+| Comunicação assíncrona | RabbitMQ: Order publica `PaymentRequested`, Payment consome e publica o resultado |
+| Resiliência | Timeout, retry com backoff exponencial, circuit breaker e fallback `503` no middleware; retry + DLQ nas filas |
+| Observabilidade | Logs em JSON, correlation ID propagado por HTTP e pela fila, métricas no Prometheus, dashboards no Grafana, tracing no Zipkin |
+| Segurança | JWT emitido pelo User Service; papéis `CUSTOMER`, `RESTAURANT_OWNER` e `ADMIN` verificados no middleware e nos serviços |
+| Tolerância a falhas | Consistência eventual e comportamento por serviço documentados em [Estratégia de consistência](#estratégia-de-consistência) |
+| Idempotência e garantia de entrega | Um pagamento por `orderId`; confirmação do broker, mensagens persistentes, retry e DLQ |
+
+## Microsserviços
+
+### 1. User Service
+
+Cadastro, login com JWT, perfis de acesso e endereços.
+
+- Entidades: `User`, `Address`
+- Perfis: `CUSTOMER`, `RESTAURANT_OWNER`, `ADMIN` (não é possível se cadastrar como `ADMIN`)
 
 ```
 POST   /users/register
@@ -36,81 +96,50 @@ POST   /users/{id}/addresses
 GET    /users/{id}/addresses
 ```
 
-## 2. Restaurant Service
+### 2. Restaurant Service
 
-Responsável pelos estabelecimentos cadastrados na plataforma.
+Cadastro e edição de restaurantes, associação com o proprietário e controle de aberto/fechado. O restaurante é criado fechado; o Order só aceita pedidos de restaurante aberto.
 
-Funcionalidades:
-- Cadastro e edição de restaurantes.
-- Associação do proprietário ao restaurante.
-- Cadastro de horários de funcionamento.
-- Controle de restaurante aberto/fechado.
-- Consulta de restaurantes disponíveis.
-
-Entidades:
-- `Restaurant`
-- `OperatingHours`
-
-Endpoints:
+- Entidade: `Restaurant`
 
 ```
 POST   /restaurants
-GET    /restaurants
+GET    /restaurants?open=true&ownerId={id}
 GET    /restaurants/{id}
 PUT    /restaurants/{id}
 PATCH  /restaurants/{id}/availability
 ```
 
-## 3. Catalog Service
+### 3. Catalog Service
 
-Responsável pelos cardápios dos restaurantes.
+Cardápios: categorias, produtos, preços e disponibilidade.
 
-Funcionalidades:
-- Cadastro de categorias.
-- Cadastro e edição de produtos.
-- Definição de preços.
-- Controle de disponibilidade dos produtos.
-- Consulta de cardápios por restaurante.
-
-Entidades:
-- `Category`
-- `Product`
-
-Endpoints:
+- Entidades: `Category`, `Product`
 
 ```
+POST   /categories
+GET    /categories/{id}
+GET    /categories/restaurant/{restaurantId}
+PUT    /categories/{id}
+PATCH  /categories/{id}/deactivate
+
 POST   /products
 GET    /products/{id}
-GET    /restaurants/{id}/products
+GET    /products/restaurant/{restaurantId}
+GET    /products/restaurant/{restaurantId}/available
 PUT    /products/{id}
 PATCH  /products/{id}/availability
+DELETE /products/{id}
+
+GET    /restaurants/{restaurantId}/menu
 ```
 
-## 4. Order Service
+### 4. Order Service
 
-Aqui juntamos Cart Service e Order Service.
+Carrinho e pedidos no mesmo serviço, já que o carrinho só existe para chegar ao checkout. No checkout, valida produtos, preços e restaurante via REST e publica `PaymentRequested`. Cada `OrderItem` guarda uma cópia do nome e do preço do produto, então mudanças futuras no cardápio não alteram pedidos antigos.
 
-O carrinho não precisa necessariamente de um microsserviço próprio. Para o escopo de vocês, ele pode ser uma funcionalidade do serviço de pedidos.
-
-Funcionalidades:
-
-- Criar e consultar carrinhos.
-- Adicionar, remover e atualizar itens.
-- Calcular subtotal.
-- Realizar checkout.
-- Validar produtos e preços com o Catalog Service.
-- Criar e consultar pedidos.
-- Controlar status dos pedidos.
-- Permitir que restaurantes aceitem ou rejeitem pedidos.
-- Atualizar status de preparação.
-
-Entidades:
-- `Cart`
-- `CartItem`
-- `Order`
-- `OrderItem`
-
-Endpoints:
+- Entidades: `Cart`, `CartItem`, `Order`, `OrderItem`
+- Estados do pedido: `PENDING_PAYMENT` → `PENDING_RESTAURANT` ou `PAYMENT_REJECTED` → `ACCEPTED` ou `REJECTED` → `PREPARING` → `READY`
 
 ```
 POST   /cart/items
@@ -128,24 +157,11 @@ PATCH  /orders/{id}/reject
 PATCH  /orders/{id}/preparation
 ```
 
-Uma observação importante: ao criar o pedido, armazenem uma cópia do nome e do preço de cada produto em `OrderItem`. Assim, uma alteração futura no cardápio não modifica pedidos antigos.
+### 5. Payment Service
 
-## 5. Payment Service
+Recebe as solicitações pela fila, simula a cobrança (aprovação configurável por `PAYMENT_APPROVAL_RATE`), publica o resultado e processa estornos.
 
-Responsável pelo processamento dos pagamentos.
-
-Funcionalidades:
-- Receber solicitações de pagamento.
-- Simular pagamento.
-- Aprovar ou recusar transações.
-- Consultar pagamentos.
-- Simular reembolsos.
-
-Entidades:
-- `Payment`
-- `PaymentTransaction`
-
-Endpoints:
+- Entidades: `Payment`, `PaymentTransaction`
 
 ```
 GET  /payments/{id}
@@ -153,36 +169,23 @@ GET  /payments/order/{orderId}
 POST /payments/{id}/refund
 ```
 
-O processamento inicial será feito por mensagens assíncronas, conforme explico a seguir.
-
 ## Fluxo completo do sistema
 
-Com essa arquitetura, o fluxo principal ficaria assim:
-
-1. Cliente realiza login pelo User Service.
-2. Consulta restaurantes pelo Restaurant Service.
-3. Consulta cardápios pelo Catalog Service.
-4. Adiciona produtos ao carrinho pelo Order Service.
-5. Solicita checkout pelo Order Service.
-6. Order Service consulta Catalog e Restaurant via REST.
-7. Order Service cria o pedido e publica `PaymentRequested`.
-8. Payment Service processa o pagamento assincronamente.
-9. Payment Service publica `PaymentApproved` ou `PaymentRejected`.
-10. Order Service atualiza o pedido.
-11. Restaurante consulta seus pedidos pendentes e aceita ou rejeita o pedido.
-12. Restaurante atualiza a preparação para `PREPARING` e depois `READY`.
-
+1. Cliente faz login pelo User Service e recebe o JWT.
+2. Consulta restaurantes (Restaurant Service) e cardápios (Catalog Service).
+3. Adiciona produtos ao carrinho (Order Service).
+4. Solicita o checkout.
+5. O Order Service consulta Catalog e Restaurant via REST, através do middleware.
+6. O Order Service grava o pedido como `PENDING_PAYMENT` e publica `PaymentRequested`.
+7. O Payment Service processa o pagamento de forma assíncrona.
+8. O Payment Service publica `PaymentApproved` ou `PaymentRejected`.
+9. O Order Service atualiza o pedido para `PENDING_RESTAURANT` ou `PAYMENT_REJECTED`.
+10. O restaurante aceita ou rejeita o pedido (se rejeitar, é pedido o estorno pela fila).
+11. O restaurante atualiza a preparação para `PREPARING` e depois `READY`.
 
 ## Middleware
 
-Toda comunicação síncrona passa pelo serviço `middleware` (porta **8080**), escrito do zero pelo grupo: a do cliente com os serviços e a do Order com o Catalog e o Restaurant. A comunicação assíncrona (Order ↔ Payment) passa pelo RabbitMQ.
-
-```
-Cliente ──► middleware :8080 ──► User | Restaurant | Catalog | Order | Payment
-                 ▲                                              │  ▲
-                 └──── Order → Catalog / Restaurant ────────────┘  │ AMQP
-                                                Order ◄── RabbitMQ ──► Payment
-```
+Toda comunicação síncrona passa pelo serviço `middleware` (porta **8080**), escrito do zero pelo grupo: a do cliente com os serviços e a do Order com o Catalog e o Restaurant. A comunicação assíncrona (Order ↔ Payment) passa pelo RabbitMQ. Não usa gateway pronto (Kong, Spring Cloud Gateway) nem biblioteca de resiliência (Resilience4j).
 
 | Capacidade | No middleware |
 |---|---|
@@ -198,6 +201,7 @@ Todos os serviços e o middleware enviam spans para o **Zipkin** (http://localho
 - Os serviços usam Micrometer Tracing com Brave (Boot 4: `spring-boot-starter-zipkin`; Boot 3: `micrometer-tracing-bridge-brave` + `zipkin-reporter-brave`).
 - O middleware usa o `HttpClient` do Java, que o Spring não instrumenta. Por isso o `DownstreamClient` cria o span e escreve o `traceparent` à mão.
 - No RabbitMQ, `observation-enabled` no template e no listener faz o `traceparent` ir no cabeçalho da mensagem.
+- As chamadas ao `/actuator` (Prometheus) e as observações do Spring Security ficam fora dos traces, para não poluir o Zipkin.
 - O Correlation ID continua igual. O tracing acrescenta `traceId`/`spanId` aos logs e mostra o tempo de cada etapa.
 - Se o Zipkin estiver fora do ar, os spans são descartados e os serviços continuam funcionando.
 
@@ -295,6 +299,20 @@ Todos os eventos têm `eventId` (UUID) e `occurredAt` (ISO-8601, UTC). Datas sem
 { "eventId": "…", "paymentId": "…", "orderId": "…", "amount": 51.80, "occurredAt": "…" }
 ```
 
+### Estratégia de consistência
+
+O projeto adota **consistência eventual** entre os serviços. Cada serviço tem o próprio banco e não há transação distribuída. O checkout grava o pedido como `PENDING_PAYMENT` e responde na hora; o resultado do pagamento chega depois, pela fila, e só então o pedido passa para `PENDING_RESTAURANT` ou `PAYMENT_REJECTED`. Durante esse intervalo, Order e Payment podem estar momentaneamente diferentes, mas convergem quando a mensagem é processada.
+
+Já as validações do checkout (produto, preço e restaurante aberto) são **síncronas e consistentes no momento da compra**: se o Catalog ou o Restaurant estiver fora, o pedido não é criado com dados incompletos (o middleware devolve `503`/`504` e o cliente pode tentar de novo).
+
+| Serviço que cai | Comportamento |
+|---|---|
+| Payment | O checkout continua funcionando. A mensagem fica guardada na `payment.requested.queue` e o pedido fica em `PENDING_PAYMENT` até o Payment voltar e processá-la. |
+| Order | O Payment continua processando; os resultados ficam na `order.payment-result.queue` até o Order voltar. |
+| Catalog ou Restaurant | O checkout falha com `503`/`504` (com retry nos `GET` e circuit breaker no middleware). Os outros serviços seguem normais. |
+| RabbitMQ | O checkout grava o pedido, mas o evento pode se perder (ver "Limitação conhecida" abaixo). |
+| Middleware | Toda a comunicação síncrona para; a mensageria continua. O Docker reinicia o container (`restart: on-failure`). |
+
 ### Garantias e tratamento de falhas
 
 | Tema | Como funciona |
@@ -310,42 +328,17 @@ Todos os eventos têm `eventId` (UUID) e `occurredAt` (ISO-8601, UTC). Datas sem
 
 **Limitação conhecida (sem Outbox):** se o broker cair entre o commit e o envio, o evento se perde. O serviço registra `EVENTO PERDIDO` no log e o pedido fica em `PENDING_PAYMENT`. A correção definitiva é um Transactional Outbox.
 
-### Como testar localmente
+### Teste de ponta a ponta da mensageria
 
 ```bash
-# 1. Sobe o projeto inteiro (os 5 serviços, os bancos, RabbitMQ e observabilidade).
-#    ORDER_PROFILES=stub faz o Order usar H2 e Catalog/Restaurant falsos.
-#    PAYMENT_APPROVAL_RATE=1.0 aprova tudo (padrão 0.8).
+# Order em modo stub (H2 e Catalog/Restaurant falsos) e todo pagamento aprovado
 ORDER_PROFILES=stub PAYMENT_APPROVAL_RATE=1.0 docker compose up -d --build
 
-# 2. Checkout → pagamento → rejeição pelo restaurante → estorno, conferindo cada etapa.
+# Checkout → pagamento → rejeição pelo restaurante → estorno, conferindo cada etapa
 ./scripts/e2e-messaging.sh
 
-# 3. Logs com o mesmo correlation id nos dois serviços
+# Logs com o mesmo correlation id nos dois serviços
 docker compose logs order-service payment-service | grep e2e-
-
-# Painel do RabbitMQ (filas, DLQs, publicar mensagem à mão): http://localhost:15672 (guest/guest)
 ```
 
 Sem `ORDER_PROFILES`, o Order chama o Catalog e o Restaurant de verdade, através do middleware; use os ids reais de produto e restaurante.
-
-Testes automatizados (os de mensageria usam Testcontainers e são pulados se não houver Docker):
-
-```bash
-cd OrderService && sh mvnw test
-cd PaymentService && sh mvnw test
-```
-
-| Serviço | Porta | Banco (porta no host) |
-|---|---|---|
-| **Middleware** (entrada única) | **8080** | – |
-| User | 8081 | `user_db` (5433) |
-| Restaurant | 8082 | `restaurant_db` (5435) |
-| Catalog | 8083 | `catalog_db` (5434) |
-| Order | 8084 | `order_db` (5436) |
-| Payment | 8085 | `payment_db` (5437) |
-| RabbitMQ | 5672 (AMQP), 15672 (painel) | – |
-| Prometheus | 9090 | – |
-| Grafana | 3000 (admin/admin) | – |
-| Zipkin | 9411 | – |
-

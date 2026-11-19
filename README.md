@@ -312,4 +312,3 @@ cd PaymentService && sh mvnw test
 | Order | 8084 | `order_db` (5436) |
 | Payment | 8085 | `payment_db` (5437) |
 
-O protótipo `payment-integration/` está obsoleto e foi substituído pelo `PaymentService/`.

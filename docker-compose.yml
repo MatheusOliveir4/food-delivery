@@ -1,20 +1,31 @@
-# Sobe o broker RabbitMQ e, via `include`, o Order Service e o Payment Service
-# (cada um com o seu próprio PostgreSQL). Todos ficam na rede `food-delivery-net`.
+# Sobe o projeto inteiro: RabbitMQ e, via `include`, os 5 microsserviços (cada um com o
+# seu próprio PostgreSQL) e a observabilidade (Prometheus, Grafana, Zipkin).
+# Todos ficam na rede `food-delivery-net`.
 #
 #   docker compose up --build            # tudo
 #   docker compose up -d rabbitmq        # só o broker (serviços pela IDE/Maven)
 #
-# Painel do RabbitMQ: http://localhost:15672 (guest/guest por padrão)
+# Portas no host:
+#   User 8081 | Restaurant 8082 | Catalog 8083 | Order 8084 | Payment 8085
+#   RabbitMQ 5672 / painel 15672 (guest/guest) | Prometheus 9090 | Grafana 3000 | Zipkin 9411
 name: food-delivery
 
 include:
+  - user-service/docker-compose.yml
+  - RestaurantService/docker-compose.yml
+  - CatalogService/docker-compose.yml
   - OrderService/docker-compose.yml
   - PaymentService/docker-compose.yml
+  - observability/docker-compose.yml
 
 services:
   rabbitmq:
     image: rabbitmq:3-management
     hostname: rabbitmq
+    # Roda como o usuário rabbitmq (uid 999) desde o início: assim o .erlang.cookie é criado
+    # com o dono certo. Sem isso, em algumas instalações do Docker Desktop o cookie nasce como
+    # root e o broker não sobe ("Error when reading .erlang.cookie: eacces").
+    user: "999:999"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}

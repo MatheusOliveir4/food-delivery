@@ -1,3 +1,5 @@
+# Pode ser usado sozinho (docker compose up nesta pasta) ou pelo docker-compose.yml da raiz.
+# O banco usa a porta 5433 no host para não conflitar com um PostgreSQL local na 5432.
 services:
   user-db:
     image: postgres:16
@@ -6,9 +8,36 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - user_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d user_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - food-delivery-net
+
+  user-service:
+    build: .
+    depends_on:
+      user-db:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://user-db:5432/user_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET: ${JWT_SECRET:-troque-esta-chave-por-uma-bem-grande-e-secreta-123}
+    ports:
+      - "8081:8081"
+    restart: on-failure
+    networks:
+      - food-delivery-net
 
 volumes:
   user_db_data:
+
+networks:
+  food-delivery-net:
+    name: food-delivery-net

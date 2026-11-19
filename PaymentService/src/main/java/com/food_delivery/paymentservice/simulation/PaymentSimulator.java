@@ -1,6 +1,7 @@
 package com.food_delivery.paymentservice.simulation;
 
 import java.math.BigDecimal;
+import java.util.SplittableRandom;
 import java.util.random.RandomGenerator;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,7 +24,7 @@ public class PaymentSimulator {
 
     @Autowired
     public PaymentSimulator(@Value("${app.payments.approval-rate:0.8}") double approvalRate) {
-        this(approvalRate, RandomGenerator.getDefault());
+        this(approvalRate, new SplittableRandom());
     }
 
     public PaymentSimulator(double approvalRate, RandomGenerator random) {

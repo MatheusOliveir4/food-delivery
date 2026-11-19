@@ -283,8 +283,8 @@ Todos os eventos têm `eventId` (UUID) e `occurredAt` (ISO-8601, UTC). Datas sem
 ### Como testar localmente
 
 ```bash
-# 1. Sobe RabbitMQ, Order (+ order-db) e Payment (+ payment-db).
-#    ORDER_PROFILES=stub dispensa Catalog e Restaurant (H2 e dados falsos no Order).
+# 1. Sobe o projeto inteiro (os 5 serviços, os bancos, RabbitMQ e observabilidade).
+#    ORDER_PROFILES=stub faz o Order usar H2 e Catalog/Restaurant falsos.
 #    PAYMENT_APPROVAL_RATE=1.0 aprova tudo (padrão 0.8).
 ORDER_PROFILES=stub PAYMENT_APPROVAL_RATE=1.0 docker compose up -d --build
 
@@ -297,7 +297,7 @@ docker compose logs order-service payment-service | grep e2e-
 # Painel do RabbitMQ (filas, DLQs, publicar mensagem à mão): http://localhost:15672 (guest/guest)
 ```
 
-Com Catalog e Restaurant rodando na máquina, suba sem `ORDER_PROFILES` e use os ids reais de produto e restaurante.
+Sem `ORDER_PROFILES`, o Order chama o Catalog e o Restaurant de verdade (pela rede `food-delivery-net`); use os ids reais de produto e restaurante.
 
 Testes automatizados (os de mensageria usam Testcontainers e são pulados se não houver Docker):
 
@@ -308,7 +308,13 @@ cd PaymentService && sh mvnw test
 
 | Serviço | Porta | Banco (porta no host) |
 |---|---|---|
-| RabbitMQ | 5672 (AMQP), 15672 (painel) | – |
+| User | 8081 | `user_db` (5433) |
+| Restaurant | 8082 | `restaurant_db` (5435) |
+| Catalog | 8083 | `catalog_db` (5434) |
 | Order | 8084 | `order_db` (5436) |
 | Payment | 8085 | `payment_db` (5437) |
+| RabbitMQ | 5672 (AMQP), 15672 (painel) | – |
+| Prometheus | 9090 | – |
+| Grafana | 3000 (admin/admin) | – |
+| Zipkin | 9411 | – |
 

@@ -22,6 +22,21 @@ services:
     networks:
       - food-delivery-net
 
+  middleware:
+    build: ./middleware
+    environment:
+      USER_SERVICE_URL: http://user-service:8081
+      RESTAURANT_SERVICE_URL: http://restaurant-service:8082
+      CATALOG_SERVICE_URL: http://catalog-service:8083
+      ORDER_SERVICE_URL: http://order-service:8084
+      PAYMENT_SERVICE_URL: http://payment-service:8085
+      JWT_SECRET: ${JWT_SECRET:-troque-esta-chave-por-uma-bem-grande-e-secreta-123}
+    ports:
+      - "8080:8080"
+    restart: on-failure
+    networks:
+      - food-delivery-net
+
   user-db:
     image: postgres:16
     environment:
@@ -83,6 +98,7 @@ services:
       DB_URL: jdbc:postgresql://restaurant-db:5432/restaurant_db
       DB_USERNAME: restaurant
       DB_PASSWORD: restaurant
+      JWT_SECRET: ${JWT_SECRET:-troque-esta-chave-por-uma-bem-grande-e-secreta-123}
     ports:
       - "8082:8082"
     restart: on-failure
@@ -145,14 +161,16 @@ services:
     depends_on:
       order-db:
         condition: service_healthy
+      middleware:
+        condition: service_started
       rabbitmq:
         condition: service_healthy
     environment:
       DB_URL: jdbc:postgresql://order-db:5432/order_db
       DB_USERNAME: order
       DB_PASSWORD: order
-      CATALOG_SERVICE_URL: ${CATALOG_SERVICE_URL:-http://catalog-service:8083}
-      RESTAURANT_SERVICE_URL: ${RESTAURANT_SERVICE_URL:-http://restaurant-service:8082}
+      CATALOG_SERVICE_URL: ${CATALOG_SERVICE_URL:-http://middleware:8080}
+      RESTAURANT_SERVICE_URL: ${RESTAURANT_SERVICE_URL:-http://middleware:8080}
       JWT_SECRET: ${JWT_SECRET:-troque-esta-chave-por-uma-bem-grande-e-secreta-123}
       RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
       RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}

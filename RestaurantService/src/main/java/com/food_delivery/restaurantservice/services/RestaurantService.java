@@ -12,9 +12,11 @@ import com.food_delivery.restaurantservice.dtos.request.UpdateAvailabilityReques
 import com.food_delivery.restaurantservice.dtos.request.UpdateRestaurantRequest;
 import com.food_delivery.restaurantservice.dtos.response.RestaurantResponse;
 import com.food_delivery.restaurantservice.entities.Restaurant;
+import com.food_delivery.restaurantservice.exceptions.ForbiddenException;
 import com.food_delivery.restaurantservice.exceptions.ResourceNotFoundException;
 import com.food_delivery.restaurantservice.mappers.RestaurantMapper;
 import com.food_delivery.restaurantservice.repositories.RestaurantRepository;
+import com.food_delivery.restaurantservice.security.AuthenticatedUser;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -57,7 +59,16 @@ public class RestaurantService {
     }
 
     @Transactional
-    public RestaurantResponse save(CreateRestaurantRequest request) {
+    public RestaurantResponse save(CreateRestaurantRequest request, AuthenticatedUser user) {
+
+        if (!user.isAdmin()) {
+            if (!user.isRestaurantOwner()) {
+                throw new ForbiddenException("Apenas donos de restaurante ou ADMIN podem cadastrar restaurantes");
+            }
+            if (!user.id().equals(request.ownerId())) {
+                throw new ForbiddenException("O proprietário do restaurante deve ser o usuário autenticado");
+            }
+        }
 
         Restaurant entity = restaurantMapper.mapToRestaurant(request);
 
@@ -69,9 +80,10 @@ public class RestaurantService {
     }
 
     @Transactional
-    public RestaurantResponse update(UUID id, UpdateRestaurantRequest request) {
+    public RestaurantResponse update(UUID id, UpdateRestaurantRequest request, AuthenticatedUser user) {
 
         Restaurant entity = findEntityById(id);
+        checkOwner(entity, user);
 
         restaurantMapper.updateRestaurant(request, entity);
 
@@ -83,9 +95,10 @@ public class RestaurantService {
     }
 
     @Transactional
-    public RestaurantResponse updateAvailability(UUID id, UpdateAvailabilityRequest request) {
+    public RestaurantResponse updateAvailability(UUID id, UpdateAvailabilityRequest request, AuthenticatedUser user) {
 
         Restaurant entity = findEntityById(id);
+        checkOwner(entity, user);
 
         entity.setOpen(request.open());
 
@@ -94,6 +107,16 @@ public class RestaurantService {
         log.info("Disponibilidade alterada id={} open={}", id, entity.isOpen());
 
         return restaurantMapper.mapToRestaurantResponse(entity);
+    }
+
+    private void checkOwner(Restaurant entity, AuthenticatedUser user) {
+        if (user.isAdmin()) {
+            return;
+        }
+        if (!user.isRestaurantOwner() || !user.id().equals(entity.getOwnerId())) {
+            log.warn("Acesso negado ao restaurante id={} userId={}", entity.getId(), user.id());
+            throw new ForbiddenException("Apenas o dono do restaurante ou ADMIN podem alterá-lo");
+        }
     }
 
     private Restaurant findEntityById(UUID id) {

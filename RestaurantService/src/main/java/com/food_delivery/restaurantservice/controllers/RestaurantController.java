@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,6 +21,7 @@ import com.food_delivery.restaurantservice.dtos.request.CreateRestaurantRequest;
 import com.food_delivery.restaurantservice.dtos.request.UpdateAvailabilityRequest;
 import com.food_delivery.restaurantservice.dtos.request.UpdateRestaurantRequest;
 import com.food_delivery.restaurantservice.dtos.response.RestaurantResponse;
+import com.food_delivery.restaurantservice.security.AuthenticatedUserResolver;
 import com.food_delivery.restaurantservice.services.RestaurantService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -36,15 +38,23 @@ public class RestaurantController {
     @Autowired
     private RestaurantService restaurantService;
 
+    @Autowired
+    private AuthenticatedUserResolver userResolver;
+
     @Operation(summary = "Cadastrar restaurante",
             description = "Cria um restaurante e associa o proprietário")
     @ApiResponse(responseCode = "201", description = "Restaurante criado")
     @ApiResponse(responseCode = "400", description = "Dados inválidos")
+    @ApiResponse(responseCode = "401", description = "Sem token ou token inválido")
+    @ApiResponse(responseCode = "403", description = "Não é dono de restaurante, ou o ownerId não é o do usuário autenticado")
     @PostMapping
-    public ResponseEntity<RestaurantResponse> create(@Valid @RequestBody CreateRestaurantRequest request) {
+    public ResponseEntity<RestaurantResponse> create(
+        @RequestHeader(value = "Authorization", required = false) String authorization,
+        @Valid @RequestBody CreateRestaurantRequest request
+    ) {
         return ResponseEntity
             .status(HttpStatus.CREATED)
-            .body(restaurantService.save(request));
+            .body(restaurantService.save(request, userResolver.resolve(authorization)));
     }
 
     @Operation(summary = "Listar restaurantes",
@@ -73,12 +83,15 @@ public class RestaurantController {
     @ApiResponse(responseCode = "200", description = "Restaurante atualizado")
     @ApiResponse(responseCode = "400", description = "Dados inválidos")
     @ApiResponse(responseCode = "404", description = "Restaurante não encontrado")
+    @ApiResponse(responseCode = "401", description = "Sem token ou token inválido")
+    @ApiResponse(responseCode = "403", description = "Não é o dono do restaurante nem ADMIN")
     @PutMapping("/{id}")
     public ResponseEntity<RestaurantResponse> update(
+        @RequestHeader(value = "Authorization", required = false) String authorization,
         @PathVariable UUID id,
         @Valid @RequestBody UpdateRestaurantRequest request
     ) {
-        return ResponseEntity.ok(restaurantService.update(id, request));
+        return ResponseEntity.ok(restaurantService.update(id, request, userResolver.resolve(authorization)));
     }
 
     @Operation(summary = "Abrir ou fechar o restaurante",
@@ -86,11 +99,14 @@ public class RestaurantController {
     @ApiResponse(responseCode = "200", description = "Disponibilidade atualizada")
     @ApiResponse(responseCode = "400", description = "Dados inválidos")
     @ApiResponse(responseCode = "404", description = "Restaurante não encontrado")
+    @ApiResponse(responseCode = "401", description = "Sem token ou token inválido")
+    @ApiResponse(responseCode = "403", description = "Não é o dono do restaurante nem ADMIN")
     @PatchMapping("/{id}/availability")
     public ResponseEntity<RestaurantResponse> updateAvailability(
+        @RequestHeader(value = "Authorization", required = false) String authorization,
         @PathVariable UUID id,
         @Valid @RequestBody UpdateAvailabilityRequest request
     ) {
-        return ResponseEntity.ok(restaurantService.updateAvailability(id, request));
+        return ResponseEntity.ok(restaurantService.updateAvailability(id, request, userResolver.resolve(authorization)));
     }
 }

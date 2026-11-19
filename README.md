@@ -173,6 +173,26 @@ Com essa arquitetura, o fluxo principal ficaria assim:
 12. Restaurante atualiza a preparação para `PREPARING` e depois `READY`.
 
 
+## Middleware
+
+Toda comunicação síncrona passa pelo serviço `middleware` (porta **8080**), escrito do zero pelo grupo: a do cliente com os serviços e a do Order com o Catalog e o Restaurant. A comunicação assíncrona (Order ↔ Payment) passa pelo RabbitMQ.
+
+```
+Cliente ──► middleware :8080 ──► User | Restaurant | Catalog | Order | Payment
+                 ▲                                              │  ▲
+                 └──── Order → Catalog / Restaurant ────────────┘  │ AMQP
+                                                Order ◄── RabbitMQ ──► Payment
+```
+
+| Capacidade | No middleware |
+|---|---|
+| Comunicação síncrona | Roteamento por tabela de rotas, com os mesmos caminhos de cada serviço |
+| Segurança | Valida o JWT do User Service e o papel exigido por rota (protege também Restaurant e Catalog) |
+| Resiliência | Timeout, retry com backoff exponencial (só `GET`), circuit breaker por serviço e fallback `503` |
+| Observabilidade | Correlation ID, log em JSON, métricas por rota e serviço, estado dos circuitos (`/middleware/health` e painel no Grafana) |
+
+Detalhes, rotas e comportamento em falhas: [`middleware/README-middleware.md`](middleware/README-middleware.md).
+
 ## Mensageria
 
 Order Service e Payment Service conversam pelo **RabbitMQ**. Nenhum dos dois chama o outro por REST e não há classe Java compartilhada: o contrato é a routing key + o JSON.
@@ -297,7 +317,7 @@ docker compose logs order-service payment-service | grep e2e-
 # Painel do RabbitMQ (filas, DLQs, publicar mensagem à mão): http://localhost:15672 (guest/guest)
 ```
 
-Sem `ORDER_PROFILES`, o Order chama o Catalog e o Restaurant de verdade (pela rede `food-delivery-net`); use os ids reais de produto e restaurante.
+Sem `ORDER_PROFILES`, o Order chama o Catalog e o Restaurant de verdade, através do middleware; use os ids reais de produto e restaurante.
 
 Testes automatizados (os de mensageria usam Testcontainers e são pulados se não houver Docker):
 
@@ -308,6 +328,7 @@ cd PaymentService && sh mvnw test
 
 | Serviço | Porta | Banco (porta no host) |
 |---|---|---|
+| **Middleware** (entrada única) | **8080** | – |
 | User | 8081 | `user_db` (5433) |
 | Restaurant | 8082 | `restaurant_db` (5435) |
 | Catalog | 8083 | `catalog_db` (5434) |

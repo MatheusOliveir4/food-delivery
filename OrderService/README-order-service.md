@@ -42,7 +42,7 @@ mvn spring-boot:run -Dspring-boot.run.profiles=stub
 MESSAGING_ENABLED=true mvn spring-boot:run -Dspring-boot.run.profiles=stub
 ```
 
-No `docker compose`, o Order chama `catalog-service:8083` e `restaurant-service:8082` pela rede interna `food-delivery-net`. Para outro endereço, defina `CATALOG_SERVICE_URL` e `RESTAURANT_SERVICE_URL` antes de subir.
+No `docker compose`, o Order chama o Catalog e o Restaurant **através do middleware** (`http://middleware:8080`), que aplica timeout, retry, circuit breaker e correlation ID. Rodando pela IDE, o padrão é chamar os serviços direto (`localhost:8083` e `localhost:8082`). Para outro endereço, defina `CATALOG_SERVICE_URL` e `RESTAURANT_SERVICE_URL`.
 
 ## Configuração (variáveis de ambiente)
 

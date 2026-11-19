@@ -19,6 +19,10 @@ spring:
 server:
   port: ${SERVER_PORT:8082}
 
+app:
+  jwt:
+    secret: ${JWT_SECRET:troque-esta-chave-por-uma-bem-grande-e-secreta-123}
+
 logging:
   structured:
     format:

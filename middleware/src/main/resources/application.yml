@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: middleware
+
+server:
+  port: ${SERVER_PORT:8080}
+
+middleware:
+  jwt-secret: ${JWT_SECRET:troque-esta-chave-por-uma-bem-grande-e-secreta-123}
+  connect-timeout: ${MIDDLEWARE_CONNECT_TIMEOUT:1s}
+  read-timeout: ${MIDDLEWARE_READ_TIMEOUT:3s}
+  service-read-timeouts:
+    order: ${MIDDLEWARE_ORDER_READ_TIMEOUT:10s}
+  retry:
+    max-attempts: ${MIDDLEWARE_RETRY_MAX_ATTEMPTS:3}
+    initial-backoff: ${MIDDLEWARE_RETRY_INITIAL_BACKOFF:200ms}
+    multiplier: 2
+  circuit-breaker:
+    failure-threshold: ${MIDDLEWARE_CB_FAILURE_THRESHOLD:5}
+    open-duration: ${MIDDLEWARE_CB_OPEN_DURATION:10s}
+  services:
+    user: ${USER_SERVICE_URL:http://localhost:8081}
+    restaurant: ${RESTAURANT_SERVICE_URL:http://localhost:8082}
+    catalog: ${CATALOG_SERVICE_URL:http://localhost:8083}
+    order: ${ORDER_SERVICE_URL:http://localhost:8084}
+    payment: ${PAYMENT_SERVICE_URL:http://localhost:8085}
+  routes:
+    - { service: user, path: /users/register, methods: [POST], access: PUBLIC }
+    - { service: user, path: /users/login, methods: [POST], access: PUBLIC }
+    - { service: user, path: /users/**, access: AUTHENTICATED }
+    - { service: catalog, path: /restaurants/*/menu, methods: [GET], access: PUBLIC }
+    - { service: restaurant, path: /restaurants/**, methods: [GET], access: PUBLIC }
+    - { service: restaurant, path: /restaurants/**, access: AUTHENTICATED, roles: [RESTAURANT_OWNER, ADMIN] }
+    - { service: catalog, path: /products/**, methods: [GET], access: PUBLIC }
+    - { service: catalog, path: /products/**, access: AUTHENTICATED, roles: [RESTAURANT_OWNER, ADMIN] }
+    - { service: catalog, path: /categories/**, methods: [GET], access: PUBLIC }
+    - { service: catalog, path: /categories/**, access: AUTHENTICATED, roles: [RESTAURANT_OWNER, ADMIN] }
+    - { service: order, path: /cart/**, access: AUTHENTICATED }
+    - { service: order, path: /orders/**, access: AUTHENTICATED }
+    - { service: order, path: /dev/payments/**, access: AUTHENTICATED }
+    - { service: payment, path: /payments/**, access: AUTHENTICATED }
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  structured:
+    format:
+      console: ${LOG_FORMAT:ecs}

@@ -16,6 +16,9 @@ import com.food_delivery.restaurantservice.exceptions.ResourceNotFoundException;
 import com.food_delivery.restaurantservice.mappers.RestaurantMapper;
 import com.food_delivery.restaurantservice.repositories.RestaurantRepository;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Service
 public class RestaurantService {
 
@@ -38,6 +41,8 @@ public class RestaurantService {
             restaurants = restaurantRepository.findAll();
         }
 
+        log.info("Listando restaurantes open={} ownerId={} total={}", open, ownerId, restaurants.size());
+
         return restaurants.stream()
             .map(restaurantMapper::mapToRestaurantResponse)
             .toList();
@@ -58,6 +63,8 @@ public class RestaurantService {
 
         entity = restaurantRepository.save(entity);
 
+        log.info("Restaurante criado id={} ownerId={}", entity.getId(), entity.getOwnerId());
+
         return restaurantMapper.mapToRestaurantResponse(entity);
     }
 
@@ -69,6 +76,8 @@ public class RestaurantService {
         restaurantMapper.updateRestaurant(request, entity);
 
         entity = restaurantRepository.saveAndFlush(entity);
+
+        log.info("Restaurante atualizado id={}", id);
 
         return restaurantMapper.mapToRestaurantResponse(entity);
     }
@@ -82,15 +91,18 @@ public class RestaurantService {
 
         entity = restaurantRepository.saveAndFlush(entity);
 
+        log.info("Disponibilidade alterada id={} open={}", id, entity.isOpen());
+
         return restaurantMapper.mapToRestaurantResponse(entity);
     }
 
     private Restaurant findEntityById(UUID id) {
         return restaurantRepository.findById(id)
-            .orElseThrow(() ->
-                new ResourceNotFoundException(
+            .orElseThrow(() -> {
+                log.warn("Restaurante não encontrado id={}", id);
+                return new ResourceNotFoundException(
                     "Restaurante não encontrado: " + id
-                )
-            );
+                );
+            });
     }
 }

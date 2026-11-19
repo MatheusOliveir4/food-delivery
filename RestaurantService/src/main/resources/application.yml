@@ -19,6 +19,15 @@ spring:
 server:
   port: ${SERVER_PORT:8082}
 
+logging:
+  structured:
+    format:
+      console: ${LOG_FORMAT:logstash}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
 management:
   endpoints:
     web:
@@ -36,3 +45,4 @@ management:
     distribution:
       percentiles-histogram:
         http.server.requests: true
+

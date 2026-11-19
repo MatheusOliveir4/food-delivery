@@ -1,35 +1,48 @@
 # Order Service
 
-Carrinho e pedidos do Food Delivery (Java 21 + Spring Boot 4.1.2 + H2 + JWT). Sobe em http://localhost:8084.
+Carrinho e pedidos do Food Delivery (Java 21 + Spring Boot 4.1.2 + PostgreSQL + Flyway + JWT). Sobe em http://localhost:8084.
 
 Documentação interativa (Swagger): http://localhost:8084/swagger-ui/index.html
+
+Saúde do serviço (sem token): http://localhost:8084/actuator/health
+
+## Banco de dados
+
+O Order tem o **próprio** PostgreSQL (`order_db`, porta 5436 no host). Nenhum outro serviço acessa esse banco, e o Order não acessa o banco de ninguém: produtos e restaurantes são consultados só pela API REST do Catalog e do Restaurant. Por isso as tabelas guardam apenas os ids (`product_id`, `restaurant_id`, `customer_id`), sem chave estrangeira para outros serviços.
+
+| Serviço | Banco | Porta no host |
+|---|---|---|
+| User | `user_db` | 5432 |
+| Catalog | `catalog_db` | 5434 |
+| Restaurant | `restaurant_db` | 5435 |
+| **Order** | **`order_db`** | **5436** |
+
+As tabelas (`carts`, `cart_items`, `orders`, `order_items`) são criadas pelo Flyway a partir de `src/main/resources/db/migration`. O Hibernate só valida o mapeamento (`ddl-auto: validate`); qualquer mudança de tabela deve ser uma nova migração (`V2__...sql`).
 
 ## Como rodar
 
 ```bash
-# integrado: chama Catalog (8080) e Restaurant (8082) via REST
+# banco + serviço em containers
+docker compose up --build
+
+# só o banco em container, serviço pela IDE ou Maven
+docker compose up -d order-db
 mvn spring-boot:run
 
-# sozinho: Catalog e Restaurant falsos
+# sem PostgreSQL e sem Catalog/Restaurant: H2 em memória e dados falsos
 mvn spring-boot:run -Dspring-boot.run.profiles=stub
 ```
 
-Com Docker:
-
-```bash
-docker build -t order-service .
-docker run -p 8084:8084 \
-  -e CATALOG_SERVICE_URL=http://host.docker.internal:8080 \
-  -e RESTAURANT_SERVICE_URL=http://host.docker.internal:8082 \
-  -e JWT_SECRET=<mesmo segredo do User Service> \
-  order-service
-```
+No `docker compose`, o Order chama Catalog (8083) e Restaurant (8082) rodando na máquina host. Para outro endereço, defina `CATALOG_SERVICE_URL` e `RESTAURANT_SERVICE_URL` antes de subir.
 
 ## Configuração (variáveis de ambiente)
 
 | Variável | Padrão | Para quê |
 |---|---|---|
-| `CATALOG_SERVICE_URL` | `http://localhost:8080` | Endereço do Catalog Service |
+| `DB_URL` | `jdbc:postgresql://localhost:5436/order_db` | Banco do Order |
+| `DB_USERNAME` / `DB_PASSWORD` | `order` / `order` | Usuário e senha do banco |
+| `SERVER_PORT` | `8084` | Porta HTTP do serviço |
+| `CATALOG_SERVICE_URL` | `http://localhost:8083` | Endereço do Catalog Service |
 | `RESTAURANT_SERVICE_URL` | `http://localhost:8082` | Endereço do Restaurant Service |
 | `JWT_SECRET` | o mesmo padrão do User Service | Validar o token emitido pelo User Service |
 | `HTTP_CONNECT_TIMEOUT` | `2s` | Tempo máximo para conectar ao Catalog e ao Restaurant |
@@ -116,6 +129,7 @@ Erros de validação trazem `errors` com a mensagem de cada campo, no lugar de `
 | Preço alterado no Catalog depois de ir para o carrinho | O checkout usa o preço atual do Catalog. Depois de criado, o pedido guarda cópia de nome e preço e não muda mais. |
 | Resultado de pagamento repetido | Ignorado: só é aplicado a pedidos em `PENDING_PAYMENT` (idempotência). |
 | Pagamento nunca responde | O pedido fica em `PENDING_PAYMENT` (ainda não há expiração). |
+| Banco do Order fora do ar | O serviço não sobe; se cair com o serviço rodando, as requisições respondem `500` e `/actuator/health` fica `DOWN`. Os outros serviços não são afetados. |
 
 **Consistência:** entre o carrinho/pedido e os outros serviços a consistência é **forte no momento do checkout** (o Order consulta Catalog e Restaurant e só grava se tudo estiver válido). Entre o pedido e o pagamento ela é **eventual**: o pedido nasce em `PENDING_PAYMENT` e só muda quando o resultado do pagamento chega.
 
